@@ -104,11 +104,11 @@ class VannaFlaskAPI:
                 if id is None:
                     id = request.json.get("id")
                     if id is None:
-                        return jsonify({"type": "error", "error": "No id provided"})
+                        return jsonify({"type": "error", "error": "Aucun identifiant fourni"})
 
                 for field in required_fields:
                     if self.cache.get(id=id, field=field) is None:
-                        return jsonify({"type": "error", "error": f"No {field} found"})
+                        return jsonify({"type": "error", "error": f"Aucun {field} trouvé"})
 
                 field_values = {
                     field: self.cache.get(id=id, field=field) for field in required_fields
@@ -186,7 +186,7 @@ class VannaFlaskAPI:
 
         if "google.colab" in sys.modules:
             self.debug = False
-            print("Google Colab doesn't support running websocket servers. Disabling debug mode.")
+            print("Google Colab ne prend pas en charge les serveurs WebSocket. Désactivation du mode debug.")
 
         if self.debug:
             def log(message, title="Info"):
@@ -253,13 +253,13 @@ class VannaFlaskAPI:
                     {
                         "type": "question_list",
                         "questions": [
-                            "What are the top 10 artists by sales?",
-                            "What are the total sales per year by country?",
-                            "Who is the top selling artist in each genre? Show the sales numbers.",
-                            "How do the employees rank in terms of sales performance?",
-                            "Which 5 cities have the most customers?",
+                            "Quels sont les 10 artistes ayant réalisé le plus de ventes ?",
+                            "Quel est le total des ventes par année et par pays ?",
+                            "Quel est l'artiste le plus vendu dans chaque genre ? Indique les chiffres de vente.",
+                            "Comment les employés se classent-ils en termes de performance de ventes ?",
+                            "Quelles sont les 5 villes ayant le plus de clients ?",
                         ],
-                        "header": "Here are some questions you can ask:",
+                        "header": "Voici quelques questions que vous pouvez poser :",
                     }
                 )
 
@@ -270,7 +270,7 @@ class VannaFlaskAPI:
                 return jsonify(
                     {
                         "type": "error",
-                        "error": "No training data found. Please add some training data first.",
+                        "error": "Aucune donnée d'entraînement trouvée. Veuillez d'abord ajouter des données d'entraînement.",
                     }
                 )
 
@@ -288,7 +288,7 @@ class VannaFlaskAPI:
                     {
                         "type": "question_list",
                         "questions": questions,
-                        "header": "Here are some questions you can ask",
+                        "header": "Voici quelques questions que vous pouvez poser",
                     }
                 )
             except Exception as e:
@@ -296,7 +296,7 @@ class VannaFlaskAPI:
                     {
                         "type": "question_list",
                         "questions": [],
-                        "header": "Go ahead and ask a question",
+                        "header": "Allez-y, posez une question",
                     }
                 )
 
@@ -329,7 +329,7 @@ class VannaFlaskAPI:
             question = flask.request.args.get("question")
 
             if question is None:
-                return jsonify({"type": "error", "error": "No question provided"})
+                return jsonify({"type": "error", "error": "Aucune question fournie"})
 
             id = self.cache.generate_id(question=question)
             sql = vn.generate_sql(question=question, allow_llm_to_see_data=self.allow_llm_to_see_data)
@@ -407,20 +407,20 @@ class VannaFlaskAPI:
             question = flask.request.args.get("question")
 
             if question is None:
-                return jsonify({"type": "error", "error": "No question provided"})
+                return jsonify({"type": "error", "error": "Aucune question fournie"})
 
             if not hasattr(vn, "get_function"):
-                return jsonify({"type": "error", "error": "This setup does not support function generation."})
+                return jsonify({"type": "error", "error": "Cette configuration ne prend pas en charge la génération de fonctions."})
 
             id = self.cache.generate_id(question=question)
             function = vn.get_function(question=question)
 
             if function is None:
-                return jsonify({"type": "error", "error": "No function found"})
+                return jsonify({"type": "error", "error": "Aucune fonction trouvée"})
 
             if 'instantiated_sql' not in function:
                 self.vn.log(f"No instantiated SQL found for {question} in {function}")
-                return jsonify({"type": "error", "error": "No instantiated SQL found"})
+                return jsonify({"type": "error", "error": "Aucune requête SQL instanciée trouvée"})
 
             self.cache.set(id=id, field="question", value=question)
             self.cache.set(id=id, field="sql", value=function['instantiated_sql'])
@@ -457,7 +457,7 @@ class VannaFlaskAPI:
                       type: array
             """
             if not hasattr(vn, "get_all_functions"):
-                return jsonify({"type": "error", "error": "This setup does not support function generation."})
+                return jsonify({"type": "error", "error": "Cette configuration ne prend pas en charge la génération de fonctions."})
 
             functions = vn.get_all_functions()
 
@@ -502,7 +502,7 @@ class VannaFlaskAPI:
                     return jsonify(
                         {
                             "type": "error",
-                            "error": "Please connect to a database using vn.connect_to_... in order to run SQL queries.",
+                            "error": "Veuillez vous connecter à une base de données en utilisant vn.connect_to_... pour exécuter des requêtes SQL.",
                         }
                     )
 
@@ -556,9 +556,11 @@ class VannaFlaskAPI:
             error = flask.request.json.get("error")
 
             if error is None:
-                return jsonify({"type": "error", "error": "No error provided"})
+                return jsonify({"type": "error", "error": "Aucune erreur fournie"})
 
-            question = f"I have an error: {error}\n\nHere is the SQL I tried to run: {sql}\n\nThis is the question I was trying to answer: {question}\n\nCan you rewrite the SQL to fix the error?"
+            question = (
+                f"J'ai une erreur : {error}\n\nVoici la requête SQL que j'ai essayé d'exécuter : {sql}\n\nVoici la question à laquelle je voulais répondre : {question}\n\nPeux-tu réécrire la requête SQL pour corriger l'erreur ?"
+            )
 
             fixed_sql = vn.generate_sql(question=question)
 
@@ -607,7 +609,7 @@ class VannaFlaskAPI:
             sql = flask.request.json.get('sql')
 
             if sql is None:
-                return jsonify({"type": "error", "error": "No sql provided"})
+                return jsonify({"type": "error", "error": "Aucune requête SQL fournie"})
 
             self.cache.set(id=id, field='sql', value=sql)
 
@@ -738,7 +740,7 @@ class VannaFlaskAPI:
                 return jsonify(
                     {
                         "type": "error",
-                        "error": "No training data found. Please add some training data first.",
+                        "error": "Aucune donnée d'entraînement trouvée. Veuillez d'abord ajouter des données d'entraînement.",
                     }
                 )
 
@@ -775,13 +777,13 @@ class VannaFlaskAPI:
             id = flask.request.json.get("id")
 
             if id is None:
-                return jsonify({"type": "error", "error": "No id provided"})
+                return jsonify({"type": "error", "error": "Aucun identifiant fourni"})
 
             if vn.remove_training_data(id=id):
                 return jsonify({"success": True})
             else:
                 return jsonify(
-                    {"type": "error", "error": "Couldn't remove training data"}
+                    {"type": "error", "error": "Impossible de supprimer les données d'entraînement"}
                 )
 
         @self.flask_app.route("/api/v0/train", methods=["POST"])

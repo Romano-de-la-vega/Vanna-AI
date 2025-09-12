@@ -10,10 +10,13 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
 # On récupère la clé depuis la variable d'environnement OPENAI_API_KEY
 api_key = os.environ.get("OPENAI_API_KEY")
 
-vn = MyVanna(config={
-    'api_key': api_key,
-    'model': 'gpt-4o-mini'  # utilisation du modèle GPT-4o mini
-})
+vn = MyVanna(
+    config={
+        'api_key': api_key,
+        'model': 'gpt-4o-mini',  # utilisation du modèle GPT-4o mini
+        'initial_prompt': "Vous êtes un expert SQL et vous répondez toujours en français."
+    }
+)
 
 vn.connect_to_postgres(
     host="localhost",
@@ -150,6 +153,10 @@ vn.train(
 
 from vanna.flask import VannaFlaskApp
 
-app = VannaFlaskApp(vn)
+app = VannaFlaskApp(
+    vn,
+    title="Bienvenue sur Vanna.AI",
+    subtitle="Votre copilote IA pour les requêtes SQL."
+)
 app.run(port=8004, debug=True)
 
