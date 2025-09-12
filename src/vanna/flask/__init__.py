@@ -10,11 +10,11 @@ import importlib.metadata
 import flask
 import requests
 from flasgger import Swagger
-from flask import Flask, Response, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory, render_template
 from flask_sock import Sock
 
 from ..base import VannaBase
-from .assets import css_content, html_content, js_content
+from .assets import js_content
 from .auth import AuthInterface, NoAuth
 
 
@@ -685,7 +685,7 @@ class VannaFlaskAPI:
                     code = vn.generate_plotly_code(
                         question=question,
                         sql=sql,
-                        df_metadata=f"Running df.dtypes gives:\n {df.dtypes}",
+                        df=df,
                     )
                     self.cache.set(id=id, field="plotly_code", value=code)
 
@@ -1260,9 +1260,6 @@ class VannaFlaskApp(VannaFlaskAPI):
             if self.assets_folder:
                 return send_from_directory(self.assets_folder, filename)
 
-            if ".css" in filename:
-                return Response(css_content, mimetype="text/css")
-
             if ".js" in filename:
                 return Response(js_content, mimetype="text/javascript")
 
@@ -1299,4 +1296,4 @@ class VannaFlaskApp(VannaFlaskAPI):
                 directory = os.path.dirname(self.index_html_path)
                 filename = os.path.basename(self.index_html_path)
                 return send_from_directory(directory=directory, path=filename)
-            return html_content
+            return render_template("index.html")

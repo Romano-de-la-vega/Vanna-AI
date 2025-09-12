@@ -187,29 +187,10 @@ class ZhipuAI_Chat(VannaBase):
 
         return plotly_code
 
-    def generate_plotly_code(
-        self, question: str = None, sql: str = None, df_metadata: str = None, **kwargs
-    ) -> str:
-        if question is not None:
-            system_msg = f"The following is a pandas DataFrame that contains the results of the query that answers the question the user asked: '{question}'"
-        else:
-            system_msg = "The following is a pandas DataFrame "
+    def generate_plotly_code(self, question: str = None, sql: str = None, df: pd.DataFrame | None = None, **kwargs) -> str:
+        """Delegate to the base implementation which uses heuristics."""
 
-        if sql is not None:
-            system_msg += f"\n\nThe DataFrame was produced using this query: {sql}\n\n"
-
-        system_msg += f"The following is information about the resulting pandas DataFrame 'df': \n{df_metadata}"
-
-        message_log = [
-            self.system_message(system_msg),
-            self.user_message(
-                "Can you generate the Python plotly code to chart the results of the dataframe? Assume the data is in a pandas dataframe called 'df'. If there is only one value in the dataframe, use an Indicator. Respond with only Python code. Do not answer with any explanations -- just the code."
-            ),
-        ]
-
-        plotly_code = self.submit_prompt(message_log, kwargs=kwargs)
-
-        return self._sanitize_plotly_code(self._extract_python_code(plotly_code))
+        return super().generate_plotly_code(question=question, sql=sql, df=df, **kwargs)
 
     def submit_prompt(
         self, prompt, max_tokens=500, temperature=0.7, top_p=0.7, stop=None, **kwargs

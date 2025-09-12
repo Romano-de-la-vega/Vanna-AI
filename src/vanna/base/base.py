@@ -733,28 +733,34 @@ class VannaBase(ABC):
         return plotly_code
 
     def generate_plotly_code(
-        self, question: str = None, sql: str = None, df_metadata: str = None, **kwargs
+        self, question: str = None, sql: str = None, df: pd.DataFrame | None = None, **kwargs
     ) -> str:
-        if question is not None:
-            system_msg = f"The following is a pandas DataFrame that contains the results of the query that answers the question the user asked: '{question}'"
-        else:
-            system_msg = "The following is a pandas DataFrame "
+        """Return Plotly Express code generated from dataframe heuristics.
 
-        if sql is not None:
-            system_msg += f"\n\nThe DataFrame was produced using this query: {sql}\n\n"
+        This avoids relying on LLM output by inspecting ``df`` and producing
+        a simple Plotly Express command that visualizes the entire dataset.
+        """
 
-        system_msg += f"The following is information about the resulting pandas DataFrame 'df': \n{df_metadata}"
+        if df is None or df.empty:
+            return "fig = px.line(df)"
 
-        message_log = [
-            self.system_message(system_msg),
-            self.user_message(
-                "Can you generate the Python plotly code to chart the results of the dataframe? Assume the data is in a pandas dataframe called 'df'. If there is only one value in the dataframe, use an Indicator. Respond with only Python code. Do not answer with any explanations -- just the code."
-            ),
-        ]
+        numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+        categorical_cols = df.select_dtypes(
+            include=["object", "category"]
+        ).columns.tolist()
 
-        plotly_code = self.submit_prompt(message_log, kwargs=kwargs)
+        if len(numeric_cols) >= 2:
+            return (
+                f"fig = px.scatter(df, x='{numeric_cols[0]}', y='{numeric_cols[1]}')"
+            )
+        if len(numeric_cols) == 1 and len(categorical_cols) >= 1:
+            return (
+                f"fig = px.bar(df, x='{categorical_cols[0]}', y='{numeric_cols[0]}')"
+            )
+        if len(categorical_cols) >= 1 and df[categorical_cols[0]].nunique() < 10:
+            return f"fig = px.pie(df, names='{categorical_cols[0]}')"
 
-        return self._sanitize_plotly_code(self._extract_python_code(plotly_code))
+        return "fig = px.line(df)"
 
     # ----------------- Connect to Any Database to run the Generated SQL ----------------- #
 
@@ -1759,7 +1765,7 @@ class VannaBase(ABC):
                     plotly_code = self.generate_plotly_code(
                         question=question,
                         sql=sql,
-                        df_metadata=f"Running df.dtypes gives:\n {df.dtypes}",
+                        df=df,
                     )
                     fig = self.get_plotly_figure(plotly_code=plotly_code, df=df)
                     if print_results:
@@ -2086,9 +2092,11 @@ class VannaBase(ABC):
         ldict = {"df": df, "px": px, "go": go}
         try:
             exec(plotly_code, globals(), ldict)
-
             fig = ldict.get("fig", None)
-        except Exception as e:
+        except Exception:
+            fig = None
+
+        if fig is None:
             # Inspect data types
             numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
             categorical_cols = df.select_dtypes(
