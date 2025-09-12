@@ -166,7 +166,7 @@ class VannaFlaskAPI:
         self.flask_app = Flask(__name__)
 
         self.swagger = Swagger(
-          self.flask_app, template={"info": {"title": "Vanna API"}}
+          self.flask_app, template={"info": {"title": "ACI Query API"}}
         )
         self.sock = Sock(self.flask_app)
         self.ws_clients = []
@@ -1174,7 +1174,7 @@ class VannaFlaskApp(VannaFlaskAPI):
         debug=True,
         allow_llm_to_see_data=False,
         logo="https://img.vanna.ai/vanna-flask.svg",
-        title="Welcome to Vanna.AI",
+        title="Welcome to ACI Query",
         subtitle="Your AI-powered copilot for SQL queries.",
         show_training_data=True,
         suggested_questions=True,
@@ -1201,7 +1201,7 @@ class VannaFlaskApp(VannaFlaskAPI):
             debug: Show the debug console. Defaults to True.
             allow_llm_to_see_data: Whether to allow the LLM to see data. Defaults to False.
             logo: The logo to display in the UI. Defaults to the Vanna logo.
-            title: The title to display in the UI. Defaults to "Welcome to Vanna.AI".
+            title: The title to display in the UI. Defaults to "Welcome to ACI Query".
             subtitle: The subtitle to display in the UI. Defaults to "Your AI-powered copilot for SQL queries.".
             show_training_data: Whether to show the training data in the UI. Defaults to True.
             suggested_questions: Whether to show suggested questions in the UI. Defaults to True.
