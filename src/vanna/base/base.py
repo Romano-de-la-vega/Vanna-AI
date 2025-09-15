@@ -90,7 +90,7 @@ class VannaBase(ABC):
 
         return f"Respond in the {self.language} language."
 
-    def generate_sql(self, question: str, allow_llm_to_see_data=False, **kwargs) -> str:
+    def generate_sql(self, question: str, allow_llm_to_see_data=True, **kwargs) -> str:
         """
         Example:
         ```python
@@ -371,7 +371,7 @@ class VannaBase(ABC):
                 f"You are a helpful data assistant. The user asked the question: '{question}'\n\nThe following is a pandas DataFrame with the results of the query: \n{df.to_markdown()}\n\n"
             ),
             self.user_message(
-                "Briefly summarize the data based on the question that was asked. Do not respond with any additional explanation beyond the summary." +
+                "Briefly summarize the data based on the question that was asked. Base your summary strictly on the provided data and do not invent information. If the data is insufficient to answer the question, state that explicitly. Do not respond with any additional explanation beyond the summary." +
                 self._response_language()
             ),
         ]
@@ -1692,6 +1692,7 @@ class VannaBase(ABC):
             Union[str, None],
             Union[pd.DataFrame, None],
             Union[plotly.graph_objs.Figure, None],
+            Union[str, None],
         ],
         None,
     ]:
@@ -1710,7 +1711,7 @@ class VannaBase(ABC):
             visualize (bool): Whether to generate plotly code and display the plotly figure.
 
         Returns:
-            Tuple[str, pd.DataFrame, plotly.graph_objs.Figure]: The SQL query, the results of the SQL query, and the plotly figure.
+            Tuple[str, pd.DataFrame, plotly.graph_objs.Figure, str]: The SQL query, the results of the SQL query, the plotly figure, and a French interpretation of the results.
         """
 
         if question is None:
@@ -1720,7 +1721,7 @@ class VannaBase(ABC):
             sql = self.generate_sql(question=question, allow_llm_to_see_data=allow_llm_to_see_data)
         except Exception as e:
             print(e)
-            return None, None, None
+            return None, None, None, None
 
         if print_results:
             try:
@@ -1737,7 +1738,7 @@ class VannaBase(ABC):
             if print_results:
                 return None
             else:
-                return sql, None, None
+                return sql, None, None, None
 
         try:
             df = self.run_sql(sql)
@@ -1753,6 +1754,24 @@ class VannaBase(ABC):
 
             if len(df) > 0 and auto_train:
                 self.add_question_sql(question=question, sql=sql)
+
+            # Generate a French summary of the results
+            summary = None
+            original_language = self.language
+            try:
+                self.language = "French"
+                summary = self.generate_summary(question=question, df=df)
+                if print_results and summary is not None:
+                    try:
+                        display = __import__(
+                            "IPython.display", fromList=["display"]
+                        ).display
+                        display(summary)
+                    except Exception:
+                        print(summary)
+            finally:
+                self.language = original_language
+
             # Only generate plotly code if visualize is True
             if visualize:
                 try:
@@ -1781,17 +1800,17 @@ class VannaBase(ABC):
                     if print_results:
                         return None
                     else:
-                        return sql, df, None
+                        return sql, df, None, summary
             else:
-                return sql, df, None
+                return sql, df, None, summary
 
         except Exception as e:
             print("Couldn't run sql: ", e)
             if print_results:
                 return None
             else:
-                return sql, None, None
-        return sql, df, fig
+                return sql, None, None, None
+        return sql, df, fig, summary
 
     def train(
         self,

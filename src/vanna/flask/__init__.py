@@ -1238,7 +1238,7 @@ class VannaFlaskApp(VannaFlaskAPI):
         self.config["followup_questions"] = followup_questions
         self.config["summarization"] = summarization
         self.config["function_generation"] = function_generation and hasattr(vn, "get_function")
-        self.config["version"] = importlib.metadata.version('vanna')
+        self.config["version"] = "1.04"
 
         self.index_html_path = index_html_path
         self.assets_folder = assets_folder
@@ -1291,6 +1291,10 @@ class VannaFlaskApp(VannaFlaskAPI):
             package_dir = os.path.dirname(__file__)
             return send_from_directory(package_dir, filename, mimetype="image/png")
 
+        # Serve the ACIP logo image
+        @self.flask_app.route("/ACIP.png")
+        def serve_acip_png():
+            return send_from_directory(os.path.dirname(__file__), "ACIP.png")
 
 
         @self.flask_app.route("/", defaults={"path": ""})
