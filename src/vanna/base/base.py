@@ -368,11 +368,15 @@ class VannaBase(ABC):
 
         message_log = [
             self.system_message(
-                f"You are a helpful data assistant. The user asked the question: '{question}'\n\nThe following is a pandas DataFrame with the results of the query: \n{df.to_markdown()}\n\n"
+                f"Tu es un assistant de données utile et précis. "
+                f"L’utilisateur a posé la question : « {question} ».\n\n"
+                f"Voici un DataFrame pandas contenant les résultats de la requête : \n{df.to_markdown()}\n\n"
             ),
             self.user_message(
-                "Briefly summarize the data based on the question that was asked. Base your summary strictly on the provided data and do not invent information. If the data is insufficient to answer the question, state that explicitly. Do not respond with any additional explanation beyond the summary." +
-                self._response_language()
+                "Résume brièvement de manière aérées ces données en français, en fonction de la question posée. "
+                "Base ton résumé strictement sur les données fournies et n’invente aucune information. "
+                "Si les données sont insuffisantes pour répondre, indique-le clairement. "
+                "Ne donne aucune explication additionnelle en dehors du résumé."
             ),
         ]
 
