@@ -152,7 +152,7 @@ class VannaBase(ABC):
                         question=question,
                         question_sql_list=question_sql_list,
                         ddl_list=ddl_list,
-                        doc_list=doc_list+[f"The following is a pandas DataFrame with the results of the intermediate SQL query {intermediate_sql}: \n" + df.to_markdown()],
+                        doc_list=doc_list+[f"Le tableau suivant est un DataFrame pandas avec les résultats de la requête SQL intermédiaire {intermediate_sql}: \n" + df.to_markdown()],
                         **kwargs,
                     )
                     self.log(title="Final SQL Prompt", message=prompt)
@@ -1686,7 +1686,7 @@ class VannaBase(ABC):
         print_results: bool = True,
         auto_train: bool = True,
         visualize: bool = True,  # if False, will not generate plotly code
-        allow_llm_to_see_data: bool = False,
+        allow_llm_to_see_data: bool = True,
     ) -> Union[
         Tuple[
             Union[str, None],

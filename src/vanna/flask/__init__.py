@@ -144,7 +144,7 @@ class VannaFlaskAPI:
         cache: Cache = MemoryCache(),
         auth: AuthInterface = NoAuth(),
         debug=True,
-        allow_llm_to_see_data=False,
+        allow_llm_to_see_data=True,
         chart=True,
     ):
         """
@@ -1177,9 +1177,9 @@ class VannaFlaskApp(VannaFlaskAPI):
         cache: Cache = MemoryCache(),
         auth: AuthInterface = NoAuth(),
         debug=True,
-        allow_llm_to_see_data=False,
+        allow_llm_to_see_data=True,
         logo="/ACIP.png",
-        title="Bienvenue sur ACI Querry",
+        title="Bienvenue sur ACI Query",
         subtitle="Votre copilote IA pour les requêtes SQL.",
         show_training_data=True,
         suggested_questions=True,
