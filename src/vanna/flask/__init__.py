@@ -331,8 +331,14 @@ class VannaFlaskAPI:
                 return jsonify({"type": "error", "error": "Aucune question fournie"})
 
             id = self.cache.generate_id(question=question)
-            sql = vn.generate_sql(question=question, allow_llm_to_see_data=self.allow_llm_to_see_data)
-
+            try:
+                sql = vn.generate_sql(
+                    question=question,
+                    allow_llm_to_see_data=self.allow_llm_to_see_data,
+                )
+            except Exception as e:
+                return jsonify({"type": "error", "error": str(e)})
+            
             self.cache.set(id=id, field="question", value=question)
             self.cache.set(id=id, field="sql", value=sql)
 
