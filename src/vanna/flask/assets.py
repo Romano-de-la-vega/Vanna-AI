@@ -12,7 +12,16 @@ html_content = '''<!doctype html>
   </head>
   <body class="bg-white dark:bg-slate-900">
     <div id="app"></div>
-    
+        <script>
+      window.addEventListener('load', () => {
+        fetch('/api/v0/get_config').then(r => r.json()).then(cfg => {
+          const logo = cfg.config.bot_logo || cfg.config.logo;
+          document.querySelectorAll('img[alt="Vanna Logo"]').forEach(img => {
+            img.src = logo;
+          });
+        });
+      });
+    </script>
   </body>
 </html>
 '''

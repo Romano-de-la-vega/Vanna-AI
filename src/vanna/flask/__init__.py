@@ -8,7 +8,6 @@ from functools import wraps
 import importlib.metadata
 
 import flask
-import requests
 from flasgger import Swagger
 from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_sock import Sock
@@ -1173,8 +1172,8 @@ class VannaFlaskApp(VannaFlaskAPI):
         auth: AuthInterface = NoAuth(),
         debug=True,
         allow_llm_to_see_data=False,
-        logo="https://img.vanna.ai/vanna-flask.svg",
-        title="Bienvenue sur Vanna.AI",
+        logo="/ACIP.png",
+        title="Bienvenue sur ACI Querry",
         subtitle="Votre copilote IA pour les requêtes SQL.",
         show_training_data=True,
         suggested_questions=True,
@@ -1190,6 +1189,7 @@ class VannaFlaskApp(VannaFlaskAPI):
         function_generation=True,
         index_html_path=None,
         assets_folder=None,
+        logo_path=None,
     ):
         """
         Expose a Flask app that can be used to interact with a Vanna instance.
@@ -1216,6 +1216,7 @@ class VannaFlaskApp(VannaFlaskAPI):
             summarization: Whether to show summarization. Defaults to True.
             index_html_path: Path to the index.html. Defaults to None, which will use the default index.html
             assets_folder: The location where you'd like to serve the static assets from. Defaults to None, which will use hardcoded Python variables.
+            logo_path: Optional path to a local logo image to serve at /logo.png.
 
         Returns:
             None
@@ -1241,6 +1242,7 @@ class VannaFlaskApp(VannaFlaskAPI):
 
         self.index_html_path = index_html_path
         self.assets_folder = assets_folder
+        self.logo_path = logo_path
 
         @self.flask_app.route("/auth/login", methods=["POST"])
         def login():
@@ -1269,28 +1271,27 @@ class VannaFlaskApp(VannaFlaskAPI):
             # Return 404
             return "Fichier non trouvé", 404
 
-        # Proxy the /vanna.svg file to the remote server
-        @self.flask_app.route("/vanna.svg")
-        def proxy_vanna_svg():
-            remote_url = "https://vanna.ai/img/vanna.svg"
-            response = requests.get(remote_url, stream=True)
+        # Serve /logo.png et /ACIP.png
+        @self.flask_app.route("/<filename>")
+        def serve_logo(filename):
+            # autoriser seulement logo.png et ACIP.png
+            if filename not in ["logo.png", "ACIP.png"]:
+                return "File not found", 404
 
-            # Check if the request to the remote URL was successful
-            if response.status_code == 200:
-                excluded_headers = [
-                    "content-encoding",
-                    "content-length",
-                    "transfer-encoding",
-                    "connection",
-                ]
-                headers = [
-                    (name, value)
-                    for (name, value) in response.raw.headers.items()
-                    if name.lower() not in excluded_headers
-                ]
-                return Response(response.content, response.status_code, headers)
-            else:
-                return "Erreur lors de la récupération du fichier depuis le serveur distant", response.status_code
+            # 1. Si self.logo_path correspond exactement au fichier demandé
+            if self.logo_path and os.path.basename(self.logo_path) == filename:
+                directory, fname = os.path.split(self.logo_path)
+                return send_from_directory(directory, fname, mimetype="image/png")
+
+            # 2. Vérifie si le fichier demandé existe dans assets_folder
+            if self.assets_folder and os.path.exists(os.path.join(self.assets_folder, filename)):
+                return send_from_directory(self.assets_folder, filename, mimetype="image/png")
+
+            # 3. Fallback : sert le fichier demandé depuis src/vanna/flask
+            package_dir = os.path.dirname(__file__)
+            return send_from_directory(package_dir, filename, mimetype="image/png")
+
+
 
         @self.flask_app.route("/", defaults={"path": ""})
         @self.flask_app.route("/<path:path>")
