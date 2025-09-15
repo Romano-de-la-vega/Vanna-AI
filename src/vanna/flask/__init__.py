@@ -20,41 +20,41 @@ from .auth import AuthInterface, NoAuth
 
 class Cache(ABC):
     """
-    Define the interface for a cache that can be used to store data in a Flask app.
+    Définit l'interface d'un cache pouvant être utilisé pour stocker des données dans une application Flask.
     """
 
     @abstractmethod
     def generate_id(self, *args, **kwargs):
         """
-        Generate a unique ID for the cache.
+        Générer un identifiant unique pour le cache.
         """
         pass
 
     @abstractmethod
     def get(self, id, field):
         """
-        Get a value from the cache.
+        Récupérer une valeur depuis le cache.
         """
         pass
 
     @abstractmethod
     def get_all(self, field_list) -> list:
         """
-        Get all values from the cache.
+        Récupérer toutes les valeurs du cache.
         """
         pass
 
     @abstractmethod
     def set(self, id, field, value):
         """
-        Set a value in the cache.
+        Définir une valeur dans le cache.
         """
         pass
 
     @abstractmethod
     def delete(self, id):
         """
-        Delete a value from the cache.
+        Supprimer une valeur du cache.
         """
         pass
 
@@ -198,7 +198,7 @@ class VannaFlaskAPI:
         @self.requires_auth
         def get_config(user: any):
             """
-            Get the configuration for a user
+            Obtenir la configuration pour un utilisateur
             ---
             parameters:
               - name: user
@@ -226,7 +226,7 @@ class VannaFlaskAPI:
         @self.requires_auth
         def generate_questions(user: any):
             """
-            Generate questions
+            Générer des questions
             ---
             parameters:
               - name: user
@@ -253,13 +253,13 @@ class VannaFlaskAPI:
                     {
                         "type": "question_list",
                         "questions": [
-                            "Quels sont les 10 artistes les plus vendus ?",
-                            "Quelles sont les ventes totales par année et par pays ?",
-                            "Quel est l'artiste le plus vendu dans chaque genre ? Affiche les chiffres de vente.",
-                            "Quel est le classement des employés en termes de performance de ventes ?",
-                            "Quelles sont les 5 villes avec le plus de clients ?",
+                            "Quels sont les 10 artistes les plus vendus ?",
+                            "Quelles sont les ventes totales par année et par pays ?",
+                            "Qui est l'artiste le plus vendu dans chaque genre ? Affiche les chiffres de ventes.",
+                            "Quel est le classement des employés en termes de performances de ventes ?",
+                            "Quelles sont les 5 villes ayant le plus de clients ?",
                         ],
-                        "header": "Voici quelques questions que vous pouvez poser :",
+                        "header": "Voici quelques questions que vous pouvez poser :",
                     }
                 )
 
@@ -304,7 +304,7 @@ class VannaFlaskAPI:
         @self.requires_auth
         def generate_sql(user: any):
             """
-            Generate SQL from a question
+            Générer du SQL à partir d'une question
             ---
             parameters:
               - name: user
@@ -358,7 +358,7 @@ class VannaFlaskAPI:
         @self.requires_auth
         def generate_rewritten_question(user: any):
             """
-            Generate a rewritten question
+            Générer une question réécrite
             ---
             parameters:
               - name: last_question
@@ -382,7 +382,7 @@ class VannaFlaskAPI:
         @self.requires_auth
         def get_function(user: any):
             """
-            Get a function from a question
+            Obtenir une fonction à partir d'une question
             ---
             parameters:
               - name: user
@@ -440,7 +440,7 @@ class VannaFlaskAPI:
         @self.requires_auth
         def get_all_functions(user: any):
             """
-            Get all the functions
+            Obtenir toutes les fonctions
             ---
             parameters:
               - name: user
@@ -473,7 +473,7 @@ class VannaFlaskAPI:
         @self.requires_cache(["sql"])
         def run_sql(user: any, id: str, sql: str):
             """
-            Run SQL
+            Exécuter du SQL
             ---
             parameters:
               - name: user
@@ -502,7 +502,7 @@ class VannaFlaskAPI:
                     return jsonify(
                         {
                             "type": "error",
-                            "error": "Veuillez vous connecter à une base de données en utilisant vn.connect_to_... afin d'exécuter des requêtes SQL.",
+                            "error": "Veuillez vous connecter à une base de données avec vn.connect_to_... pour exécuter des requêtes SQL.",
                         }
                     )
 
@@ -527,7 +527,7 @@ class VannaFlaskAPI:
         @self.requires_cache(["question", "sql"])
         def fix_sql(user: any, id: str, question: str, sql: str):
             """
-            Fix SQL
+            Corriger le SQL
             ---
             parameters:
               - name: user
@@ -558,7 +558,7 @@ class VannaFlaskAPI:
             if error is None:
                 return jsonify({"type": "error", "error": "Aucune erreur fournie"})
 
-            question = f"J'ai une erreur : {error}\n\nVoici la requête SQL que j'ai essayé d'exécuter : {sql}\n\nC'était la question à laquelle j'essayais de répondre : {question}\n\nPeux-tu réécrire la requête SQL pour corriger l'erreur ?"
+            question = f"J'ai une erreur : {error}\n\nVoici le SQL que j'ai essayé d'exécuter : {sql}\n\nVoici la question à laquelle je tentais de répondre : {question}\n\nPeux-tu réécrire le SQL pour corriger cette erreur ?"
 
             fixed_sql = vn.generate_sql(question=question)
 
@@ -578,7 +578,7 @@ class VannaFlaskAPI:
         @self.requires_cache([])
         def update_sql(user: any, id: str):
             """
-            Update SQL
+            Mettre à jour le SQL
             ---
             parameters:
               - name: user
@@ -607,7 +607,7 @@ class VannaFlaskAPI:
             sql = flask.request.json.get('sql')
 
             if sql is None:
-                return jsonify({"type": "error", "error": "Aucune requête SQL fournie"})
+                return jsonify({"type": "error", "error": "Aucun SQL fourni"})
 
             self.cache.set(id=id, field='sql', value=sql)
 
@@ -623,7 +623,7 @@ class VannaFlaskAPI:
         @self.requires_cache(["df"])
         def download_csv(user: any, id: str, df):
             """
-            Download CSV
+            Télécharger le CSV
             ---
             parameters:
               - name: user
@@ -649,7 +649,7 @@ class VannaFlaskAPI:
         @self.requires_cache(["df", "question", "sql"])
         def generate_plotly_figure(user: any, id: str, df, question, sql):
             """
-            Generate plotly figure
+            Générer une figure Plotly
             ---
             parameters:
               - name: user
@@ -681,7 +681,7 @@ class VannaFlaskAPI:
                 if chart_instructions is None or len(chart_instructions) == 0:
                     code = self.cache.get(id=id, field="plotly_code")
                 else:
-                    question = f"{question}. When generating the chart, use these special instructions: {chart_instructions}"
+                    question = f"{question}. Lors de la génération du graphique, utilise ces instructions spéciales : {chart_instructions}"
                     code = vn.generate_plotly_code(
                         question=question,
                         sql=sql,
@@ -713,7 +713,7 @@ class VannaFlaskAPI:
         @self.requires_auth
         def get_training_data(user: any):
             """
-            Get all training data
+            Obtenir toutes les données d'entraînement
             ---
             parameters:
               - name: user
@@ -754,7 +754,7 @@ class VannaFlaskAPI:
         @self.requires_auth
         def remove_training_data(user: any):
             """
-            Remove training data
+            Supprimer des données d'entraînement
             ---
             parameters:
               - name: user
@@ -788,7 +788,7 @@ class VannaFlaskAPI:
         @self.requires_auth
         def add_training_data(user: any):
             """
-            Add training data
+            Ajouter des données d'entraînement
             ---
             parameters:
               - name: user
@@ -833,7 +833,7 @@ class VannaFlaskAPI:
         @self.requires_cache(["question", "sql"])
         def create_function(user: any, id: str, question: str, sql: str):
             """
-            Create function
+            Créer une fonction
             ---
             parameters:
               - name: user
@@ -874,7 +874,7 @@ class VannaFlaskAPI:
         @self.requires_auth
         def update_function(user: any):
             """
-            Update function
+            Mettre à jour une fonction
             ---
             parameters:
               - name: user
@@ -909,7 +909,7 @@ class VannaFlaskAPI:
         @self.requires_auth
         def delete_function(user: any):
             """
-            Delete function
+            Supprimer une fonction
             ---
             parameters:
               - name: user
@@ -935,7 +935,7 @@ class VannaFlaskAPI:
         @self.requires_cache(["df", "question", "sql"])
         def generate_followup_questions(user: any, id: str, df, question, sql):
             """
-            Generate followup questions
+            Générer des questions de suivi
             ---
             parameters:
               - name: user
@@ -973,7 +973,7 @@ class VannaFlaskAPI:
                         "type": "question_list",
                         "id": id,
                         "questions": followup_questions,
-                        "header": "Voici quelques questions de suivi possibles :",
+                        "header": "Voici quelques questions de suivi possibles :",
                     }
                 )
             else:
@@ -992,7 +992,7 @@ class VannaFlaskAPI:
         @self.requires_cache(["df", "question"])
         def generate_summary(user: any, id: str, df, question):
             """
-            Generate summary
+            Générer un résumé
             ---
             parameters:
               - name: user
@@ -1043,7 +1043,7 @@ class VannaFlaskAPI:
         )
         def load_question(user: any, id: str, question, sql, df, fig_json, summary):
             """
-            Load question
+            Charger une question
             ---
             parameters:
               - name: user
@@ -1093,7 +1093,7 @@ class VannaFlaskAPI:
         @self.requires_auth
         def get_question_history(user: any):
             """
-            Get question history
+            Obtenir l'historique des questions
             ---
             parameters:
               - name: user
@@ -1121,7 +1121,7 @@ class VannaFlaskAPI:
         @self.flask_app.route("/api/v0/<path:catch_all>", methods=["GET", "POST"])
         def catch_all(catch_all):
             return jsonify(
-                {"type": "error", "error": "Le reste de l'API n'a pas encore été porté."}
+                {"type": "error", "error": "Le reste de l'API n'est pas encore porté."}
             )
 
         if self.debug:
@@ -1156,10 +1156,10 @@ class VannaFlaskAPI:
                 output.serve_kernel_port_as_window(8084)
                 from google.colab.output import eval_js
 
-                print("Votre application est accessible à :")
+                print("Votre application est accessible à l'adresse :")
                 print(eval_js("google.colab.kernel.proxyPort(8084)"))
             except:
-                print("Votre application est accessible à :")
+                print("Votre application est accessible à l'adresse :")
                 print("http://localhost:8084")
 
             self.flask_app.run(host="0.0.0.0", port=8084, debug=self.debug, use_reloader=False)
@@ -1201,8 +1201,8 @@ class VannaFlaskApp(VannaFlaskAPI):
             debug: Show the debug console. Defaults to True.
             allow_llm_to_see_data: Whether to allow the LLM to see data. Defaults to False.
             logo: The logo to display in the UI. Defaults to the Vanna logo.
-            title: Le titre affiché dans l'interface utilisateur. Par défaut « Bienvenue sur Vanna.AI ».
-            subtitle: Le sous-titre affiché dans l'interface utilisateur. Par défaut « Votre copilote IA pour les requêtes SQL. ».
+            title: Le titre affiché dans l'interface utilisateur. Par défaut « Bienvenue sur Vanna.AI ».
+            subtitle: Le sous-titre affiché dans l'interface utilisateur. Par défaut « Votre copilote IA pour les requêtes SQL. ».
             show_training_data: Whether to show the training data in the UI. Defaults to True.
             suggested_questions: Whether to show suggested questions in the UI. Defaults to True.
             sql: Whether to show the SQL input in the UI. Defaults to True.
@@ -1267,7 +1267,7 @@ class VannaFlaskApp(VannaFlaskAPI):
                 return Response(js_content, mimetype="text/javascript")
 
             # Return 404
-            return "Fichier introuvable", 404
+            return "Fichier non trouvé", 404
 
         # Proxy the /vanna.svg file to the remote server
         @self.flask_app.route("/vanna.svg")

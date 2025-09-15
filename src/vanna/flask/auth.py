@@ -46,10 +46,10 @@ class NoAuth(AuthInterface):
         return ''
 
     def login_handler(self, flask_request) -> str:
-        return 'No login required'
+        return 'Aucune connexion requise'
 
     def callback_handler(self, flask_request) -> str:
-        return 'No login required'
+        return 'Aucune connexion requise'
 
     def logout_handler(self, flask_request) -> str:
-        return 'No login required'
+        return 'Aucune connexion requise'

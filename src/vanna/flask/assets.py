@@ -1,5 +1,5 @@
 html_content = '''<!doctype html>
-<html lang="en" translate>
+<html lang="fr" translate>
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vanna.svg" />
