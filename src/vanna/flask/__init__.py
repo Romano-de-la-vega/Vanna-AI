@@ -1244,7 +1244,7 @@ class VannaFlaskApp(VannaFlaskAPI):
         self.config["followup_questions"] = followup_questions
         self.config["summarization"] = summarization
         self.config["function_generation"] = function_generation and hasattr(vn, "get_function")
-        self.config["version"] = "1.04"
+        self.config["version"] = "1.0.6"
 
         self.index_html_path = index_html_path
         self.assets_folder = assets_folder
