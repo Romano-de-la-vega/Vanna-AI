@@ -1,0 +1,867 @@
+- question: "Lister tous les projets avec leur nom et ID (numéro interne)"
+  sql: |
+    SELECT onb, name
+    FROM ordo_project;
+
+- question: "Chercher un projet par son nom contenant '038'"
+  sql: |
+    SELECT onb, name, real_start, real_finish
+    FROM ordo_project
+    WHERE name ILIKE '%038%';
+
+- question: "Avoir les risques associés aux projets"
+  sql: |
+    SELECT owpr.opx2_comment, op2.name
+    FROM opx2__wf_pt_risks owpr
+    INNER JOIN ordo_project op2 ON op2.onb = owpr.dataset
+    ORDER BY op2.name;
+
+- question: "Projets récemment modifiés (avec la date de mise à jour)"
+  sql: |
+    SELECT onb, name, update_date
+    FROM ordo_project
+    WHERE update_date IS NOT NULL
+    ORDER BY update_date DESC
+    LIMIT 20;
+
+- question: "Nombre de projets par utilisateur créateur"
+  sql: |
+    SELECT owner, COUNT(*) AS nb_projets
+    FROM ordo_project
+    GROUP BY owner
+    ORDER BY nb_projets DESC;
+
+- question: "Projets avec leur description"
+  sql: |
+    SELECT name, opx2_comment AS description
+    FROM ordo_project
+    WHERE opx2_comment IS NOT NULL;
+
+- question: "Projets en cours à l’instant présent"
+  sql: |
+    SELECT name, real_start, real_finish
+    FROM ordo_project
+    WHERE real_start <= NOW()
+      AND (real_finish IS NULL OR real_finish >= NOW());
+
+- question: "Durée des projets (en jours) quand les dates sont renseignées"
+  sql: |
+    SELECT onb, name, (real_finish - real_start) AS duree_jours
+    FROM ordo_project
+    WHERE real_start IS NOT NULL
+      AND real_finish IS NOT NULL;
+
+- question: "Projets dont le nom ou la description contient 'plan'"
+  sql: |
+    SELECT onb, name, opx2_comment
+    FROM ordo_project
+    WHERE name ILIKE '%plan%'
+       OR opx2_comment ILIKE '%plan%';
+
+- question: "Nombre de projets par année de début"
+  sql: |
+    SELECT EXTRACT(YEAR FROM real_start) AS annee, COUNT(*) AS nb_projets
+    FROM ordo_project
+    WHERE real_start IS NOT NULL
+    GROUP BY annee
+    ORDER BY annee DESC;
+
+- question: "Statut des projets (En cours / Terminé / À venir)"
+  sql: |
+    SELECT name,
+           CASE
+             WHEN real_finish IS NOT NULL AND real_finish < NOW() THEN 'Terminé'
+             WHEN real_start IS NOT NULL  AND real_start > NOW() THEN 'À venir'
+             ELSE 'En cours'
+           END AS statut
+    FROM ordo_project;
+
+- question: "Descriptions en doublon (avec le nombre d’occurrences)"
+  sql: |
+    SELECT opx2_comment, COUNT(*) AS occurrences
+    FROM ordo_project
+    GROUP BY opx2_comment
+    HAVING COUNT(*) > 1
+    ORDER BY occurrences DESC, opx2_comment;
+- question: |
+    Heures réelles par projet
+    But : Total des heures réellement saisies sur chaque projet.
+    Explication : Regroupe les lignes d’imputation (WORK_PERFORMED) par projet (via DATASET). Tu obtiens le total d’heures consommées par projet.
+  sql: |
+    SELECT
+      p.ONB   AS project_onb,
+      p.NAME  AS project_name,
+      SUM(wp.TOTAL_LOAD) AS actual_hours
+      -- , SUM(wp.TOTAL_LOAD / NULLIF(x.RATE_ACTUAL,0)) AS actual_hours_normalized  -- option : si tu as un taux "réel"
+    FROM WORK_PERFORMED wp
+    JOIN ORDO_PROJECT p ON p.ONB = wp.DATASET
+    GROUP BY p.ONB, p.NAME
+    ORDER BY actual_hours DESC;
+
+- question: |
+    Heures planifiées par projet
+    But : Volume planifié agrégé, pour quantifier la charge budgétée en heures.
+    Explication : Agrège TASK_ALLOC par projet. RATE moyen et QTY sont fournis pour qualifier l’intensité et/ou la granularité.
+  sql: |
+    SELECT
+      p.ONB   AS project_onb,
+      p.NAME  AS project_name,
+      SUM(ta.TOTAL_LOAD) AS planned_hours,
+      AVG(ta.RATE)       AS avg_planned_rate,
+      SUM(ta.QTY)        AS planned_qty -- utile si QTY a un sens chez toi
+    FROM TASK_ALLOC ta
+    JOIN ORDO_PROJECT p ON p.ONB = ta.DATASET
+    GROUP BY p.ONB, p.NAME
+    ORDER BY planned_hours DESC;
+
+- question: |
+    Heures par projet × ressource (réel + plan)
+    But : Vue fine par ressource pour la capacité/affectation.
+    Explication : Combine Actual et Planned au niveau projet×ressource, même si l’une des deux sources manque. Très utile pour la vision charge/consommé par ressource.
+  sql: |
+    WITH act AS (
+      SELECT DATASET, OPX2_RESOURCE, SUM(TOTAL_LOAD) AS actual_hours
+      FROM WORK_PERFORMED
+      GROUP BY DATASET, OPX2_RESOURCE
+    ),
+    pln AS (
+      SELECT DATASET, OPX2_RESOURCE, SUM(TOTAL_LOAD) AS planned_hours, AVG(RATE) AS avg_rate
+      FROM TASK_ALLOC
+      GROUP BY DATASET, OPX2_RESOURCE
+    ),
+    u AS (
+      -- UNION pour simuler un FULL OUTER JOIN
+      SELECT DATASET, OPX2_RESOURCE FROM act
+      UNION
+      SELECT DATASET, OPX2_RESOURCE FROM pln
+    )
+    SELECT
+      p.ONB  AS project_onb,
+      p.NAME AS project_name,
+      r.ONB  AS resource_onb,
+      COALESCE(a.actual_hours,0) AS actual_hours,
+      COALESCE(pl.planned_hours,0) AS planned_hours,
+      COALESCE(pl.avg_rate,NULL)   AS planned_avg_rate
+    FROM u
+    LEFT JOIN ORDO_PROJECT  p ON p.ONB = u.DATASET
+    LEFT JOIN OPX2_RESOURCE r ON r.ONB = u.OPX2_RESOURCE
+    LEFT JOIN act a  ON a.DATASET = u.DATASET AND a.OPX2_RESOURCE = u.OPX2_RESOURCE
+    LEFT JOIN pln pl ON pl.DATASET = u.DATASET AND pl.OPX2_RESOURCE = u.OPX2_RESOURCE
+    ORDER BY p.ONB, r.ONB;
+
+- question: |
+    EAC heures (EAC = Actual + Planned)
+    But : Estimation à terminaison en heures.
+    Explication : EAC (heures) = heures consommées + heures encore planifiées. ETC (heures) = heures planifiées (puisqu’elles représentent le futur).
+  sql: |
+    WITH act AS (
+      SELECT DATASET, SUM(TOTAL_LOAD) AS actual_hours
+      FROM WORK_PERFORMED
+      GROUP BY DATASET
+    ),
+    pln AS (
+      SELECT DATASET, SUM(TOTAL_LOAD) AS planned_hours
+      FROM TASK_ALLOC
+      GROUP BY DATASET
+    )
+    SELECT
+      p.ONB   AS project_onb,
+      p.NAME  AS project_name,
+      COALESCE(a.actual_hours,0) AS actual_hours,
+      COALESCE(pl.planned_hours,0) AS planned_hours,
+      COALESCE(a.actual_hours,0) + COALESCE(pl.planned_hours,0) AS eac_hours, -- EAC heures
+      COALESCE(pl.planned_hours,0) AS etc_hours -- « reste à faire » en heures = planned
+    FROM ORDO_PROJECT p
+    LEFT JOIN act a  ON a.DATASET = p.ONB
+    LEFT JOIN pln pl ON pl.DATASET = p.ONB
+    WHERE a.DATASET IS NOT NULL OR pl.DATASET IS NOT NULL
+    ORDER BY eac_hours DESC;
+
+- question: |
+    Écarts heures par projet et % avancement « à l’heure »
+    But : Suivre Actual vs Planned et un pourcentage d’avancement basé sur les heures.
+    Explication : Donne une lecture rapide de l’état d’avancement « en heures » (ici en proportion de EAC heures).
+  sql: |
+    WITH a AS (
+      SELECT DATASET, SUM(TOTAL_LOAD) AS ah FROM WORK_PERFORMED GROUP BY DATASET
+    ),
+    p AS (
+      SELECT DATASET, SUM(TOTAL_LOAD) AS ph FROM TASK_ALLOC GROUP BY DATASET
+    )
+    SELECT
+      pr.ONB   AS project_onb,
+      pr.NAME  AS project_name,
+      COALESCE(a.ah,0) AS actual_hours,
+      COALESCE(p.ph,0) AS planned_hours,
+      COALESCE(a.ah,0) - COALESCE(p.ph,0) AS variance_hours,
+      CASE
+        WHEN COALESCE(a.ah,0) + COALESCE(p.ph,0) = 0 THEN 0
+        ELSE 100.0 * COALESCE(a.ah,0) / (COALESCE(a.ah,0) + COALESCE(p.ph,0))
+      END AS progress_pct_hours -- % progression (simple) basé heures
+    FROM ORDO_PROJECT pr
+    LEFT JOIN a ON a.DATASET = pr.ONB
+    LEFT JOIN p ON p.DATASET = pr.ONB
+    ORDER BY progress_pct_hours DESC;
+
+- question: |
+    Heures réelles par activité (ALLOC_NUMBER) dans le projet appelé 001
+    Explication : Agrège les heures réelles par identifiant d’allocation (proxy d’une activité). Si tu as une vraie table TASK (par ex. TASK(ALLOC_NUMBER → TASK_ID, TASK_NAME, …)), tu peux la joindre ici pour afficher le libellé d’activité.
+  sql: |
+    SELECT
+      wp.ALLOC_NUMBER AS activity_id,
+      SUM(wp.TOTAL_LOAD) AS actual_hours
+      -- , SUM(wp.TOTAL_LOAD / NULLIF(r.RATE,0)) AS actual_hours_normalized  -- si tu veux normaliser (si RATE réel existe ailleurs)
+    FROM WORK_PERFORMED wp
+    JOIN ORDO_PROJECT op ON op.ONB = wp.DATASET
+    WHERE op.NAME = '001'
+    GROUP BY wp.ALLOC_NUMBER
+    ORDER BY actual_hours DESC;
+
+- question: "Heures planifiées par activité (global)"
+  sql: |
+    SELECT
+      ta.ONB,
+      SUM(ta.TOTAL_LOAD) AS planned_hours,
+      AVG(ta.RATE)       AS avg_rate
+    FROM TASK_ALLOC ta
+    JOIN ORDO_PROJECT op ON op.ONB = ta.DATASET
+    GROUP BY ta.ONB 
+    ORDER BY planned_hours DESC;
+
+- question: "Heures planifiées par activité pour le projet 002"
+  sql: |
+    SELECT
+      ta.ONB,
+      SUM(ta.TOTAL_LOAD) AS planned_hours,
+      AVG(ta.RATE)       AS avg_rate
+    FROM TASK_ALLOC ta
+    JOIN ORDO_PROJECT op ON op.ONB = ta.DATASET
+    WHERE op.NAME = '002'
+    GROUP BY ta.ONB 
+    ORDER BY planned_hours DESC;
+
+- question: |
+    Heures réelles par ressource (avec états « billable/on-site »)
+    Explication : Vue utile pour la productivité et la facturabilité par ressource.
+  sql: |
+    SELECT
+      r.ONB AS resource_onb,
+      SUM(wp.TOTAL_LOAD) AS actual_hours,
+      SUM(CASE WHEN wp.OPX2__TC_AA_B_BILLABLE = true  THEN wp.TOTAL_LOAD ELSE 0 END) AS billable_hours,
+      SUM(CASE WHEN wp.OPX2__TC_AA_B_ON_SITE  = true THEN wp.TOTAL_LOAD ELSE 0 END) AS on_site_hours
+    FROM WORK_PERFORMED wp
+    JOIN OPX2_RESOURCE r ON r.ONB = wp.OPX2_RESOURCE
+    GROUP BY r.ONB
+    ORDER BY actual_hours DESC;
+
+- question: |
+    Heures (réelles & planifiées) par CBS
+    Explication : Vue consolidée par CBS (centre de coûts) pour croiser charge consommée et charge budgétée.
+  sql: |
+    WITH a AS (
+      SELECT CBS, SUM(TOTAL_LOAD) AS ah
+      FROM WORK_PERFORMED GROUP BY CBS
+    ),
+    p AS (
+      SELECT CBS, SUM(TOTAL_LOAD) AS ph
+      FROM TASK_ALLOC GROUP BY CBS
+    )
+    SELECT
+      COALESCE(a.CBS, p.CBS) AS cbs_onb,
+      COALESCE(a.ah,0) AS actual_hours,
+      COALESCE(p.ph,0) AS planned_hours
+    FROM a
+    FULL OUTER JOIN p ON p.CBS = a.CBS
+    ORDER BY cbs_onb;
+
+- question: |
+    Plan : distribution par DURATION_MODE et impact sur le taux fixe FIXED_RATE
+    Explication : Contrôle de paramétrage : comment les heures planifiées sont réparties selon les règles de durée et le verrouillage de taux.
+  sql: |
+    SELECT
+      ta.DURATION_MODE,
+      ta.FIXED_RATE,
+      COUNT(*)            AS nb_alloc,
+      SUM(ta.TOTAL_LOAD)  AS planned_hours,
+      AVG(ta.RATE)        AS avg_rate
+    FROM TASK_ALLOC ta
+    GROUP BY ta.DURATION_MODE, ta.FIXED_RATE
+    ORDER BY nb_alloc DESC;
+
+- question: "Coût planifié par projet (budget / prévision)"
+  sql: |
+    SELECT
+      p.ONB  AS project_onb,
+      p.NAME AS project_name,
+      SUM(e.qty)        AS planned_cost,
+      COUNT(*)          AS lines
+    FROM EXPENDITURE e
+    JOIN ORDO_PROJECT p ON p.ONB = e.DATASET
+    GROUP BY p.ONB, p.NAME
+    ORDER BY planned_cost DESC;
+
+- question: "Coût planifié du projet 007 (budget / prévision)"
+  sql: |
+    SELECT
+      p.ONB  AS project_onb,
+      p.NAME AS project_name,
+      SUM(e.qty)        AS planned_cost,
+      COUNT(*)          AS lines
+    FROM EXPENDITURE e
+    JOIN ORDO_PROJECT p ON p.ONB = e.DATASET
+    WHERE p."name" = '007'
+    GROUP BY p.ONB, p.NAME
+    ORDER BY planned_cost DESC;
+
+- question: |
+    Coût réel par projet + EAC (coût) = AC + PLN
+    Explication : Calcule AC (réel), PLN (budget restant/planifié) et EAC (coût) = AC + PLN.
+  sql: |
+    WITH ac AS (
+      SELECT ie.DATASET, SUM(ie.qty) AS actual_cost
+      FROM INCURRED_EXPENDITURE ie
+      GROUP BY ie.DATASET
+    ),
+    pln AS (
+      SELECT e.DATASET, SUM(e.qty) AS planned_cost
+      FROM EXPENDITURE e
+      GROUP BY e.DATASET
+    )
+    SELECT
+      p.ONB  AS project_onb,
+      p.NAME AS project_name,
+      COALESCE(a.actual_cost,0) AS actual_cost,
+      COALESCE(pl.planned_cost,0) AS planned_cost,
+      COALESCE(a.actual_cost,0) + COALESCE(pl.planned_cost,0) AS eac_cost
+    FROM ORDO_PROJECT p
+    JOIN ac  a  ON a.DATASET  = p.ONB
+    JOIN pln pl ON pl.DATASET = p.ONB
+    WHERE a.DATASET IS NOT NULL OR pl.DATASET IS NOT NULL
+    ORDER BY eac_cost DESC;
+
+- question: "Coûts par CBS"
+  sql: |
+    WITH ac AS (
+      SELECT CBS, SUM(qty) AS actual_cost
+      FROM INCURRED_EXPENDITURE
+      GROUP BY CBS
+    ),
+    pln AS (
+      SELECT CBS, SUM(qty) AS planned_cost
+      FROM EXPENDITURE
+      GROUP BY CBS
+    )
+    SELECT
+      COALESCE(ac.CBS, pln.CBS) AS cbs_onb,
+      COALESCE(ac.actual_cost,0) AS actual_cost,
+      COALESCE(pln.planned_cost,0) AS planned_cost,
+      COALESCE(ac.actual_cost,0) + COALESCE(pln.planned_cost,0) AS eac_cost
+    FROM ac
+    FULL OUTER JOIN pln ON pln.CBS = ac.CBS
+    ORDER BY eac_cost DESC;
+
+- question: |
+    Coûts planifiés par Type / Unité
+    Explication : Vue d’analyse financière par nature de dépense et unité monétaire.
+  sql: |
+    SELECT
+      e.TYPE,
+      e.UNIT,                         -- devise / unité
+      SUM(e.qty) AS planned_cost,
+      COUNT(*)   AS lines
+    FROM EXPENDITURE e
+    GROUP BY e.TYPE, e.UNIT
+    ORDER BY planned_cost DESC;
+
+- question: "Heures & Coûts — vues combinées (Tableau de bord projet)"
+  sql: |
+    WITH ah AS ( -- Actual Hours
+      SELECT DATASET, SUM(TOTAL_LOAD) AS actual_hours
+      FROM WORK_PERFORMED GROUP BY DATASET
+    ),
+    ph AS ( -- Planned Hours
+      SELECT DATASET, SUM(TOTAL_LOAD) AS planned_hours
+      FROM TASK_ALLOC GROUP BY DATASET
+    ),
+    ac AS ( -- Actual Cost (si DATASET présent sur incurred)
+      SELECT DATASET, SUM(qty) AS actual_cost
+      FROM INCURRED_EXPENDITURE GROUP BY DATASET
+    ),
+    pc AS ( -- Planned Cost
+      SELECT DATASET, SUM(qty) AS planned_cost
+      FROM EXPENDITURE GROUP BY DATASET
+    )
+    SELECT
+      p.ONB  AS project_onb,
+      p.NAME AS project_name,
+      COALESCE(ah.actual_hours,0) AS actual_hours,
+      COALESCE(ph.planned_hours,0) AS planned_hours,
+      COALESCE(ah.actual_hours,0) + COALESCE(ph.planned_hours,0) AS eac_hours,
+      COALESCE(ac.actual_cost,0)  AS actual_cost,
+      COALESCE(pc.planned_cost,0) AS planned_cost,
+      COALESCE(ac.actual_cost,0) + COALESCE(pc.planned_cost,0) AS eac_cost
+    FROM ORDO_PROJECT p
+    LEFT JOIN ah ON ah.DATASET = p.ONB
+    LEFT JOIN ph ON ph.DATASET = p.ONB
+    LEFT JOIN ac ON ac.DATASET = p.ONB
+    LEFT JOIN pc ON pc.DATASET = p.ONB
+    WHERE ah.DATASET IS NOT NULL OR ph.DATASET IS NOT NULL
+       OR ac.DATASET IS NOT NULL OR pc.DATASET IS NOT NULL
+    ORDER BY p.ONB;
+
+- question: |
+    Heures & Coûts — vues combinées (quand rapprochement pertinent)
+    Tableau de bord projet (heures + coûts)
+    Explication : Dashboard unique pour comparer heures et coûts d’un même projet, avec EAC heures et EAC coût.
+  sql: |
+    WITH ah AS ( -- Actual Hours
+      SELECT DATASET, SUM(TOTAL_LOAD) AS actual_hours
+      FROM WORK_PERFORMED GROUP BY DATASET
+    ),
+    ph AS ( -- Planned Hours
+      SELECT DATASET, SUM(TOTAL_LOAD) AS planned_hours
+      FROM TASK_ALLOC GROUP BY DATASET
+    ),
+    ac AS ( -- Actual Cost
+      SELECT DATASET, SUM(qty) AS actual_cost
+      FROM INCURRED_EXPENDITURE GROUP BY DATASET
+    ),
+    pc AS ( -- Planned Cost
+      SELECT DATASET, SUM(qty) AS planned_cost
+      FROM EXPENDITURE GROUP BY DATASET
+    )
+    SELECT
+      p.ONB  AS project_onb,
+      p.NAME AS project_name,
+      COALESCE(ah.actual_hours,0) AS actual_hours,
+      COALESCE(ph.planned_hours,0) AS planned_hours,
+      COALESCE(ah.actual_hours,0) + COALESCE(ph.planned_hours,0) AS eac_hours,
+      COALESCE(ac.actual_cost,0)  AS actual_cost,
+      COALESCE(pc.planned_cost,0) AS planned_cost,
+      COALESCE(ac.actual_cost,0) + COALESCE(pc.planned_cost,0) AS eac_cost
+    FROM ORDO_PROJECT p
+    LEFT JOIN ah ON ah.DATASET = p.ONB
+    LEFT JOIN ph ON ph.DATASET = p.ONB
+    LEFT JOIN ac ON ac.DATASET = p.ONB
+    LEFT JOIN pc ON pc.DATASET = p.ONB
+    WHERE ah.DATASET IS NOT NULL OR ph.DATASET IS NOT NULL
+       OR ac.DATASET IS NOT NULL OR pc.DATASET IS NOT NULL
+    ORDER BY p.ONB;
+
+- question: |
+    Ratio € / h budgété (quand corrélé au même CBS)
+    Explication : Uniquement si tu as une corrélation métier (même CBS, même périmètre) entre heures et coûts planifiés : calcule un coût horaire indicatif (budget).
+  sql: |
+    WITH ph AS ( -- Planned hours par projet × CBS
+      SELECT DATASET, CBS, SUM(TOTAL_LOAD) AS ph
+      FROM TASK_ALLOC GROUP BY DATASET, CBS
+    ),
+    pc AS ( -- Planned cost par projet × CBS
+      SELECT DATASET, CBS, SUM(qty) AS pc
+      FROM EXPENDITURE GROUP BY DATASET, CBS
+    )
+    SELECT
+      p.ONB  AS project_onb,
+      p.NAME AS project_name,
+      ph.CBS AS cbs_onb,
+      ph.ph  AS planned_hours,
+      pc.pc  AS planned_cost,
+      CASE WHEN ph.ph > 0 THEN pc.pc / ph.ph ELSE NULL END AS planned_cost_per_hour
+    FROM ph
+    JOIN pc ON pc.DATASET = ph.DATASET AND pc.CBS = ph.CBS
+    JOIN ORDO_PROJECT p ON p.ONB = ph.DATASET
+    ORDER BY planned_cost_per_hour DESC NULLS LAST;
+
+- question: |
+    Effet d’un glissement de durée (+10 %) selon FIXED_RATE
+    Explication : Montre l’impact attendu d’une variation de durée.
+  sql: |
+    SELECT
+      ta.DATASET,
+      ta.OPX2_RESOURCE,
+      ta.DURATION_MODE,
+      ta.FIXED_RATE,
+      SUM(ta.TOTAL_LOAD) AS planned_hours,
+      AVG(ta.RATE)       AS avg_rate,
+      CASE WHEN ta.FIXED_RATE = true
+           THEN SUM(ta.TOTAL_LOAD) * 1.10
+           ELSE SUM(ta.TOTAL_LOAD)
+      END AS hours_if_plus10pct_duration,
+      CASE WHEN ta.FIXED_RATE = false AND AVG(ta.RATE) IS NOT NULL AND AVG(ta.RATE) <> 0
+           THEN AVG(ta.RATE) / 1.10
+           ELSE AVG(ta.RATE)
+      END AS rate_if_plus10pct_duration
+    FROM TASK_ALLOC ta
+    GROUP BY ta.DATASET, ta.OPX2_RESOURCE, ta.DURATION_MODE, ta.FIXED_RATE
+    ORDER BY ta.DATASET, ta.OPX2_RESOURCE;
+
+- question: |
+    Ressources génériques qui portent des heures réelles
+    Explication : Détecte les heures posées sur des profils génériques (utile pour la qualité d’affectation).
+  sql: |
+    SELECT
+      r.ONB AS resource_onb,
+      r."name",
+      SUM(wp.TOTAL_LOAD) AS actual_hours
+    FROM WORK_PERFORMED wp
+    JOIN OPX2_RESOURCE r ON r.ONB = wp.OPX2_RESOURCE
+    WHERE r.OPX2__INF_AA_B_GENERIC_RES = true
+    GROUP BY r.ONB
+    ORDER BY actual_hours DESC;
+
+- question: |
+    Plans incohérents : FIXED_RATE=1 sans dates fixes
+    Explication : Contrôle simple de cohérence planning.
+  sql: |
+    SELECT *
+    FROM TASK_ALLOC
+    WHERE FIXED_RATE = true
+      AND (FIXED_START IS NULL OR FIXED_END IS NULL);
+
+- question: |
+    Heures & Coûts par CBS (si INCURRED_EXPENDITURE.DATASET existe)
+    Explication : Donne pour chaque projet×CBS la charge heures (réelle/plan) et le coût (réel/plan). Idéal pour du contrôle budgétaire opérationnel.
+  sql: |
+    WITH ah AS (
+      SELECT DATASET, CBS, SUM(TOTAL_LOAD) AS actual_hours
+      FROM WORK_PERFORMED GROUP BY DATASET, CBS
+    ),
+    ph AS (
+      SELECT DATASET, CBS, SUM(TOTAL_LOAD) AS planned_hours
+      FROM TASK_ALLOC GROUP BY DATASET, CBS
+    ),
+    ac AS (
+      SELECT DATASET, CBS, SUM(qty) AS actual_cost
+      FROM INCURRED_EXPENDITURE GROUP BY DATASET, CBS
+    ),
+    pc AS (
+      SELECT DATASET, CBS, SUM(qty) AS planned_cost
+      FROM EXPENDITURE GROUP BY DATASET, CBS
+    )
+    SELECT
+      p.ONB  AS project_onb,
+      p.NAME AS project_name,
+      k.CBS  AS cbs_onb,
+      COALESCE(ah.actual_hours,0) AS actual_hours,
+      COALESCE(ph.planned_hours,0) AS planned_hours,
+      COALESCE(ac.actual_cost,0)  AS actual_cost,
+      COALESCE(pc.planned_cost,0) AS planned_cost
+    FROM (
+      SELECT DISTINCT COALESCE(ah.DATASET, ph.DATASET, ac.DATASET, pc.DATASET) AS DATASET,
+                      COALESCE(ah.CBS, ph.CBS, ac.CBS, pc.CBS) AS CBS
+      FROM ah FULL OUTER JOIN ph ON ph.DATASET = ah.DATASET AND ph.CBS = ah.CBS
+      FULL OUTER JOIN ac ON ac.DATASET = COALESCE(ah.DATASET, ph.DATASET)
+                        AND ac.CBS    = COALESCE(ah.CBS, ph.CBS)
+      FULL OUTER JOIN pc ON pc.DATASET = COALESCE(ah.DATASET, ph.DATASET, ac.DATASET)
+                        AND pc.CBS    = COALESCE(ah.CBS, ph.CBS, ac.CBS)
+    ) k
+    JOIN ORDO_PROJECT p ON p.ONB = k.DATASET
+    LEFT JOIN ah ON ah.DATASET = k.DATASET AND ah.CBS = k.CBS
+    LEFT JOIN ph ON ph.DATASET = k.DATASET AND ph.CBS = k.CBS
+    LEFT JOIN ac ON ac.DATASET = k.DATASET AND ac.CBS = k.CBS
+    LEFT JOIN pc ON pc.DATASET = k.DATASET AND pc.CBS = k.CBS
+    ORDER BY p.ONB, k.CBS;
+
+- question: |
+    Audit rapide du projet 001 avec l’ordre WBS (approx. placement) puis la date de début cible
+  sql: |
+    SELECT ws.*
+    FROM work_structure ws
+    JOIN ordo_project op ON op.onb = ws.dataset
+    WHERE op."name" = '001'
+    ORDER BY ws.placement NULLS LAST, ws.target_start NULLS LAST, ws.target_finish NULLS LAST;
+
+- question: |
+    Fenêtre de réalisation par projet (span planning)
+    Utilité : bornes temporelles par projet à partir des cibles. Avec date de début, de fin et de fin prévue.
+  sql: |
+    SELECT op."name" AS project_code,
+           MIN(ws.effective_start)  AS first_target_start,
+           MAX(ws.effective_finish) AS last_target_finish,
+           MAX(ws.target_finish) AS supposed_finish,
+           COUNT(*)              AS nb_rows
+    FROM work_structure ws
+    JOIN ordo_project op ON op.onb = ws.dataset
+    GROUP BY op."name"
+    ORDER BY op."name";
+
+- question: |
+    Avancement “physique” moyen par projet
+    Utilité : photographie macro basée sur physical_furtherance (0–100).
+  sql: |
+    SELECT op."name" AS project_code,
+           ROUND(AVG(ws.physical_furtherance)::numeric,1) AS avg_phys_progress,
+           COUNT(*) AS nb_items
+    FROM work_structure ws
+    JOIN ordo_project op ON op.onb = ws.dataset
+    WHERE ws.physical_furtherance IS NOT NULL
+    GROUP BY op."name"
+    ORDER BY avg_phys_progress DESC NULLS LAST;
+
+- question: |
+    Répartition task_type par projet
+    Utilité : vérifier la typologie des éléments (jalon, sommaire, feuille…).
+  sql: |
+    SELECT op."name" AS project_code, ws.task_type, COUNT(*) AS nb
+    FROM work_structure ws
+    JOIN ordo_project op ON op.onb = ws.dataset
+    GROUP BY op."name", ws.task_type
+    ORDER BY op."name", ws.task_type;
+
+- question: "Matrice Produit (BS1) × Client (BS0) — volume & ETC"
+  sql: |
+    SELECT COALESCE(ws.opx2_1bs) AS product_line,
+           COALESCE(ws.opx2_0bs) AS customer,
+           COUNT(*) AS nb_activities,
+           SUM(ws.etc) AS etc_sum
+    FROM work_structure ws
+    GROUP BY product_line, customer
+    ORDER BY etc_sum DESC NULLS LAST, nb_activities DESC;
+
+- question: "Fin dans les 90 prochains jours (tous projets)"
+  sql: |
+    SELECT op."name" AS project_code, ws.onb, ws.name, ws."name" , ws.target_finish  
+    FROM work_structure ws
+    JOIN ordo_project op ON op.onb = ws.dataset
+    WHERE ws.target_finish >= now() 
+      AND ws.target_finish <  now()  + make_interval(days => 90)
+    ORDER BY ws.target_finish;
+
+- question: "Retards planifiés (échus, non terminés)"
+  sql: |
+    SELECT op."name" AS project_code, ws.onb, ws.name, ws.target_finish, ws.effective_finish
+    FROM work_structure ws
+    JOIN ordo_project op ON op.onb = ws.dataset
+    WHERE ws.target_finish < now() 
+      AND ws.effective_finish IS NULL;
+
+- question: "Écarts de temps entre la date de fin Réel et Planifiés, prévue (delta jours)"
+  sql: |
+    SELECT op."name" AS project_code, ws.onb, ws.name,
+           ws.target_finish, ws.effective_finish,
+           EXTRACT(DAY FROM (ws.effective_finish - ws.target_finish)) AS delta_days
+    FROM work_structure ws
+    JOIN ordo_project op ON op.onb = ws.dataset
+    WHERE ws.effective_finish IS NOT NULL
+    ORDER BY delta_days DESC NULLS LAST;
+
+- question: "Conflits : contrainte de début après le début planifié"
+  sql: |
+    SELECT op."name" AS project_code, ws.onb, ws.name, ws.target_start , ws.imposed_start
+    FROM work_structure ws
+    JOIN ordo_project op ON op.onb = ws.dataset
+    WHERE ws.imposed_start IS NOT NULL
+      AND ws.target_start IS NOT NULL
+      AND ws.imposed_start > ws.target_start;
+
+- question: "Deadlines irréalistes : fin imposée avant fin planifiée"
+  sql: |
+    SELECT op."name" AS project_code, ws.onb, ws.name, ws.target_finish , ws.imposed_end
+    FROM work_structure ws
+    JOIN ordo_project op ON op.onb = ws.dataset
+    WHERE ws.imposed_end IS NOT NULL
+      AND ws.target_finish  IS NOT NULL
+      AND ws.imposed_end < ws.target_finish;
+
+- question: |
+    Éléments sans dates cibles
+    Utilité : hygiène de données avant reporting.
+  sql: |
+    SELECT op."name" AS project_code, ws.task_type, ws.priority
+    FROM work_structure ws
+    JOIN ordo_project op ON op.onb = ws.dataset
+    WHERE ws.target_start IS NULL OR ws.target_finish IS NULL;
+
+- question: |
+    Priorité moyenne par projet
+    Utilité : benchmark de sévérité/urgence relative.
+  sql: |
+    SELECT op."name" AS project_code,
+           ROUND(AVG(ws.priority)::numeric,1) AS avg_priority,
+           COUNT(*) AS nb
+    FROM work_structure ws
+    JOIN ordo_project op ON op.onb = ws.dataset
+    WHERE ws.priority IS NOT NULL
+    GROUP BY op."name"
+    ORDER BY avg_priority DESC NULLS LAST;
+
+- question: |
+    tc_closed : taux de clôture par projet
+    Utilité : suivre la complétion opérationnelle (timecard/fermeture).
+  sql: |
+    SELECT op."name" AS project_code,
+           COUNT(*) FILTER (WHERE ws.tc_closed IS TRUE)  AS closed,
+           COUNT(*) FILTER (WHERE ws.tc_closed IS NOT TRUE) AS open_or_unknown,
+           ROUND(100.0 * COUNT(*) FILTER (WHERE ws.tc_closed IS TRUE) / NULLIF(COUNT(*),0),1) AS pct_closed
+    FROM work_structure ws
+    JOIN ordo_project op ON op.onb = ws.dataset
+    GROUP BY op."name"
+    ORDER BY pct_closed DESC NULLS LAST;
+
+- question: |
+    sync_version manquant (à resynchroniser ?)
+    Utilité : détecter des lignes potentiellement hors-sync.
+  sql: |
+    SELECT op."name" AS project_code, COUNT(*) AS nb_missing_sync
+    FROM work_structure ws
+    JOIN ordo_project op ON op.onb = ws.dataset
+    WHERE ws.sync_version IS NULL
+    GROUP BY op."name"
+    ORDER BY nb_missing_sync DESC;
+
+- question: |
+    Respect de la fenêtre budgétaire (sbudget_start/finish)
+    Utilité : items planifiés hors fenêtre budgétaire théorique.
+  sql: |
+    SELECT op."name" AS project_code, ws.target_start, ws.target_finish, ws.sbudget_start, ws.sbudget_finish
+    FROM work_structure ws
+    JOIN ordo_project op ON op.onb = ws.dataset
+    WHERE ws.sbudget_start IS NOT NULL AND ws.sbudget_finish IS NOT NULL
+      AND (ws.target_start  < ws.sbudget_start OR ws.target_finish > ws.sbudget_finish)
+    ORDER BY op."name", ws.target_start NULLS LAST;
+
+- question: |
+    priority extrêmes dans le projet 001
+    Utilité : focus sur items très prioritaires ou très bas.
+  sql: |
+    SELECT ws.priority, COUNT(*) AS nb
+    FROM work_structure ws
+    JOIN ordo_project op ON op.onb = ws.dataset
+    WHERE op."name" = '001'
+    GROUP BY ws.priority
+    ORDER BY ws.priority DESC NULLS LAST;
+
+- question: |
+    Coûts d’un projet précis (AC, PLN, EAC, Variance, CPI) — projet '001'
+    Utilité : Photo financière synthèse d’un projet, conforme à tes définitions :
+      • EAC (coût) = AC + PLN
+      • Écart de coût = AC − PLN
+      • CPI = AC / PLN
+  sql: |
+    WITH ac AS (  -- Actual cost sur tout l’historique
+      SELECT SUM(ie.qty) AS actual_cost
+      FROM INCURRED_EXPENDITURE ie
+      JOIN ORDO_PROJECT p ON p.ONB = ie.DATASET
+      WHERE p.NAME = '001'
+    ),
+    pl AS (       -- Planned cost (budget/prévision)
+      SELECT SUM(e.qty) AS planned_cost
+      FROM EXPENDITURE e
+      JOIN ORDO_PROJECT p ON p.ONB = e.DATASET
+      WHERE p.NAME = '001'
+    )
+    SELECT
+      COALESCE(ac.actual_cost, 0)                           AS actual_cost,
+      COALESCE(pl.planned_cost, 0)                          AS planned_cost,
+      COALESCE(ac.actual_cost, 0) + COALESCE(pl.planned_cost, 0) AS eac_cost,
+      COALESCE(ac.actual_cost, 0) - COALESCE(pl.planned_cost, 0) AS cost_variance,
+      CASE WHEN COALESCE(pl.planned_cost, 0) = 0 THEN NULL
+           ELSE COALESCE(ac.actual_cost, 0) / pl.planned_cost
+      END AS cpi
+    FROM ac
+    CROSS JOIN pl;
+
+- question: |
+    Par ressource : heures réelles pour le projet 001
+    Utilité : qui consomme le plus (staffing réel).
+  sql: |
+    SELECT p.NAME AS project_name,
+           wp.OPX2_RESOURCE AS resource_id,
+           SUM(wp.TOTAL_LOAD) AS actual_hours
+    FROM ORDO_PROJECT p
+    JOIN WORK_PERFORMED wp ON wp.DATASET = p.ONB
+    WHERE p.NAME = '001'
+    GROUP BY p.NAME, wp.OPX2_RESOURCE
+    ORDER BY actual_hours DESC;
+
+- question: |
+    Heures réelles Billable vs Non billable
+    Utilité : suivi d’“utilization” facturable.
+  sql: |
+    SELECT CASE WHEN wp.OPX2__TC_AA_B_BILLABLE = True THEN 'BILLABLE' ELSE 'NON_BILLABLE' END AS bill_flag,
+           SUM(wp.TOTAL_LOAD) AS hours
+    FROM ORDO_PROJECT p
+    JOIN WORK_PERFORMED wp ON wp.DATASET = p.ONB
+    WHERE p.NAME = '001'
+    GROUP BY CASE WHEN wp.OPX2__TC_AA_B_BILLABLE = True THEN 'BILLABLE' ELSE 'NON_BILLABLE' END;
+
+- question: |
+    Profil mensuel des heures planifiées — 6 derniers mois
+    Utilité : série temporelle du plan (les ACT ne sont pas datés).
+  sql: |
+    WITH months AS (
+      SELECT
+        (date_trunc('month', now()) - MAKE_INTERVAL(months => g))::date                                         AS m_start,
+        ((date_trunc('month', now()) - MAKE_INTERVAL(months => g)) + MAKE_INTERVAL(months => 1)
+           - MAKE_INTERVAL(days => 1))::date                                                                    AS m_end
+      FROM generate_series(0, 5) AS g
+    )
+    SELECT
+      m.m_start AS month_start,
+      m.m_end   AS month_end,
+      COALESCE(
+        SUM(
+          CASE
+            WHEN ta.FIXED_START IS NOT NULL AND ta.FIXED_END IS NOT NULL THEN
+              ta.TOTAL_LOAD
+              * GREATEST(
+                  0,
+                  (
+                    LEAST(ta.FIXED_END::date,   m.m_end::date)
+                    - GREATEST(ta.FIXED_START::date, m.m_start::date)
+                    + 1
+                  )::int
+                )::numeric
+                / NULLIF(
+                    (ta.FIXED_END::date - ta.FIXED_START::date + 1)::int,
+                    0
+                  )
+            ELSE 0
+          END
+        )
+      ,0) AS planned_hours
+    FROM months m
+    JOIN ORDO_PROJECT p ON p.NAME = '001'
+    JOIN TASK_ALLOC ta  ON ta.DATASET = p.ONB
+    GROUP BY m.m_start, m.m_end
+    ORDER BY month_start;
+
+- question: |
+    Hygiène planning (work_structure) : tâches à clôturer
+    Utilité : tâches dont la fin planifiée est passée mais tc_closed = 0.
+  sql: |
+    SELECT
+      ws.task_type,
+      ws.priority,
+      COUNT(*) AS tasks_late_not_closed
+    FROM work_structure ws
+    JOIN ORDO_PROJECT p ON p.ONB = ws.DATASET
+    WHERE p.NAME = '001'
+      AND COALESCE(ws.target_finish, ws.sbudget_finish, ws.real_fixed_end) < now()::date
+      AND COALESCE(ws.tc_closed, false) = false
+    GROUP BY ws.task_type, ws.priority
+    ORDER BY tasks_late_not_closed DESC;
+
+- question: |
+    Portefeuille : top projets par heures réelles
+    Utilité : pilotage global (sans dates côté ACT).
+  sql: |
+    SELECT p.NAME AS project_name,
+           SUM(wp.TOTAL_LOAD) AS actual_hours
+    FROM ORDO_PROJECT p
+    JOIN WORK_PERFORMED wp ON wp.DATASET = p.ONB
+    GROUP BY p.NAME
+    ORDER BY actual_hours DESC
+    LIMIT 10;
+
+- question: |
+    Exposition délai agrégée pour le projet nommé 001
+    Utilité : lecture du risque planning si ta table risques est utilisée.
+  sql: |
+    SELECT p.NAME AS project_name,
+           SUM(r.MC_AA_D_DELAY_IMPACT) AS total_delay_impact
+    FROM ORDO_PROJECT p
+    JOIN OPX2__WF_PT_RISKS r ON r.DATASET = p.ONB
+    WHERE p.NAME = '001'
+    GROUP BY p.NAME;
+

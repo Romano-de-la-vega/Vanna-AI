@@ -1,0 +1,17 @@
+[
+  {
+    "id": "92b205e8-9886-53bb-ac06-6764594d1f9a-sql",
+    "question": "qui à créer le projet nommée '038' ?",
+    "sql": "SELECT owner FROM public.ordo_project WHERE name = '038';"
+  },
+  {
+    "id": "d266d678-32de-5fb0-9eb8-d19323eb1a51-sql",
+    "question": "quels projets comporte le plus de risques ?",
+    "sql": "SELECT op.NAME AS project_name,\n       COUNT(r.ONB) AS risk_count\nFROM ORDO_PROJECT op\nLEFT JOIN OPX2__WF_PT_RISKS r ON r.DATASET = op.ONB\nGROUP BY op.NAME\nORDER BY risk_count DESC;"
+  },
+  {
+    "id": "e16a0375-4fb6-5ab3-a8fa-613b510b8344-sql",
+    "question": "quels projets comporte le plus de risques ?",
+    "sql": "SELECT op.NAME AS project_name,\n       COUNT(r.ONB) AS risk_count,\n       r.NAME AS risk_name,\n       r.OPX2_COMMENT AS risk_comment,\n       r.OPX2__WF_AA_N_RISK_STATE AS risk_state\nFROM ORDO_PROJECT op\nJOIN OPX2__WF_PT_RISKS r ON r.DATASET = op.ONB\nWHERE r.OPX2__WF_AA_B_MANAGED = true\nGROUP BY op.NAME, r.NAME, r.OPX2_COMMENT, r.OPX2__WF_AA_N_RISK_STATE\nORDER BY risk_count DESC;"
+  }
+]

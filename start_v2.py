@@ -1,7 +1,7 @@
 import json
 import os
 from pathlib import Path
-
+import yaml
 from vanna.chromadb import ChromaDB_VectorStore
 from vanna.openai import OpenAI_Chat
 
@@ -124,148 +124,41 @@ with open("description_10class.txt", "r", encoding="utf-8") as f:
     docu_plw = f.read()
 
 vn.train(documentation=docu_plw)
+def load_sql_qa(path: str | Path):
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(p)
 
-vn.train(
-  question="Lister tous les projets avec leur nom et ID (numéro interne)",
-  sql="""
-    SELECT onb, name
-    FROM ordo_project;
-  """,
-  persist=False,
-)
+    ext = p.suffix.lower()
+    text = p.read_text(encoding="utf-8")
 
-vn.train(
-  question="Chercher un projet par son nom contenant '038'",
-  sql="""
-    SELECT onb, name, real_start, real_finish
-    FROM ordo_project
-    WHERE name ILIKE '%038%';
-  """,
-  persist=False,
-)
+    if ext == ".json":
+        return json.loads(text) or []
 
+    if ext in (".yaml", ".yml"):
+        if yaml is None:
+            raise RuntimeError(
+                "PyYAML n’est pas installé. Fais: pip install pyyaml, ou utilise un .json"
+            )
+        data = yaml.safe_load(text)
+        # Autorise soit une liste d’objets {question, sql}, soit un dict avec clé "items"
+        if isinstance(data, dict) and "items" in data:
+            return data["items"] or []
+        return data or []
 
-vn.train(
+    raise ValueError("Extension non supportée (utilise .json, .yaml ou .yml)")
 
-  question="Avoir les risques associés aux projets",
-  sql="""
-    SELECT 
-      owpr.opx2_comment, 
-      op2.name
-  FROM opx2__wf_pt_risks owpr
-  INNER JOIN ordo_project op2 
-        ON op2.onb = owpr.dataset
-  ORDER BY op2.name;
-  """,
-  persist=False,
-)
+# ... ton code existant (création vn, connect_to_postgres, train(ddl), train(documentation)) ...
 
-vn.train(
-  question="Projets récemment modifiés (avec la date de mise à jour)",
-  sql="""
-    SELECT onb, name, update_date
-    FROM ordo_project
-    WHERE update_date IS NOT NULL
-    ORDER BY update_date DESC
-    LIMIT 20;
-  """,
-  persist=False,
-)
+# 🔹 Charge toutes les paires question/SQL depuis un fichier
+examples = load_sql_qa("sql_qa.yaml")  # ou "training_data/sql_qa.yaml"
 
-vn.train(
-  question="Nombre de projets par utilisateur créateur",
-  sql="""
-    SELECT owner, COUNT(*) AS nb_projets
-    FROM ordo_project
-    GROUP BY owner
-    ORDER BY nb_projets DESC;
-  """,
-  persist=False,
-)
-
-vn.train(
-  question="Projets avec leur description",
-  sql="""
-    SELECT name, opx2_comment AS description
-    FROM ordo_project
-    WHERE opx2_comment IS NOT NULL;
-  """,
-  persist=False,
-)
-
-vn.train(
-  question="Projets en cours à l’instant présent",
-  sql="""
-    SELECT name, real_start, real_finish
-    FROM ordo_project
-    WHERE real_start <= NOW()
-      AND (real_finish IS NULL OR real_finish >= NOW());
-  """,
-  persist=False,
-)
-
-vn.train(
-  question="Durée des projets (en jours) quand les dates sont renseignées",
-  sql="""
-    SELECT onb, name,
-           (real_finish - real_start) AS duree_jours
-    FROM ordo_project
-    WHERE real_start IS NOT NULL
-      AND real_finish IS NOT NULL;
-  """,
-  persist=False,
-)
-
-vn.train(
-  question="Projets dont le nom ou la description contient 'plan'",
-  sql="""
-    SELECT onb, name, opx2_comment
-    FROM ordo_project
-    WHERE name ILIKE '%plan%'
-       OR opx2_comment ILIKE '%plan%';
-  """,
-  persist=False,
-)
-
-vn.train(
-  question="Nombre de projets par année de début",
-  sql="""
-    SELECT EXTRACT(YEAR FROM real_start) AS annee,
-           COUNT(*) AS nb_projets
-    FROM ordo_project
-    WHERE real_start IS NOT NULL
-    GROUP BY annee
-    ORDER BY annee DESC;
-  """,
-  persist=False,
-)
-
-vn.train(
-  question="Statut des projets (En cours / Terminé / À venir)",
-  sql="""
-    SELECT name,
-           CASE
-             WHEN real_finish IS NOT NULL AND real_finish < NOW() THEN 'Terminé'
-             WHEN real_start IS NOT NULL  AND real_start > NOW() THEN 'À venir'
-             ELSE 'En cours'
-           END AS statut
-    FROM ordo_project;
-  """,
-  persist=False,
-)
-
-vn.train(
-  question="Descriptions en doublon (avec le nombre d’occurrences)",
-  sql="""
-    SELECT opx2_comment, COUNT(*) AS occurrences
-    FROM ordo_project
-    GROUP BY opx2_comment
-    HAVING COUNT(*) > 1
-    ORDER BY occurrences DESC, opx2_comment;
-  """,
-  persist=False,
-)
-
+for ex in examples:
+    q = ex.get("question")
+    s = ex.get("sql")
+    if q and s:
+        vn.train(question=q, sql=s, persist=False) 
+        
 vn.load_persisted_training_data()
 
 from vanna.flask import VannaFlaskApp
