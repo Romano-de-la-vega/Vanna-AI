@@ -113,11 +113,10 @@
     JOIN ORDO_PROJECT p ON p.ONB = ta.DATASET
     GROUP BY p.ONB, p.NAME
     ORDER BY planned_hours DESC;
-
+###
 - question: |
-    Heures par projet × ressource (réel + plan)
-    But : Vue fine par ressource pour la capacité/affectation.
-    Explication : Combine Actual et Planned au niveau projet×ressource, même si l’une des deux sources manque. Très utile pour la vision charge/consommé par ressource.
+    Comment consolider, par projet et par ressource, les heures réelles et planifiées (même si l’une des deux est absente) ?
+    Pour chaque couple projet×ressource, quelles sont les heures consommées, les heures prévues et le taux moyen planifié ?
   sql: |
     WITH act AS (
       SELECT DATASET, OPX2_RESOURCE, SUM(TOTAL_LOAD) AS actual_hours
@@ -150,9 +149,8 @@
     ORDER BY p.ONB, r.ONB;
 
 - question: |
-    EAC heures (EAC = Actual + Planned)
-    But : Estimation à terminaison en heures.
-    Explication : EAC (heures) = heures consommées + heures encore planifiées. ETC (heures) = heures planifiées (puisqu’elles représentent le futur).
+    Par projet, quelle est l’estimation à terminaison en heures (EAC = Actual + Planned) et le « reste à faire » (ETC) ?
+    Quels projets ont les EAC heures les plus élevés et comment se répartissent heures consommées vs planifiées ?
   sql: |
     WITH act AS (
       SELECT DATASET, SUM(TOTAL_LOAD) AS actual_hours
@@ -178,9 +176,8 @@
     ORDER BY eac_hours DESC;
 
 - question: |
-    Écarts heures par projet et % avancement « à l’heure »
-    But : Suivre Actual vs Planned et un pourcentage d’avancement basé sur les heures.
-    Explication : Donne une lecture rapide de l’état d’avancement « en heures » (ici en proportion de EAC heures).
+    Pour chaque projet, quel est l’écart d’heures (Actual − Planned) et le pourcentage de progression basé heures ?
+    Quels projets apparaissent les plus avancés selon la proportion d’heures consommées sur EAC heures ?
   sql: |
     WITH a AS (
       SELECT DATASET, SUM(TOTAL_LOAD) AS ah FROM WORK_PERFORMED GROUP BY DATASET
@@ -204,8 +201,8 @@
     ORDER BY progress_pct_hours DESC;
 
 - question: |
-    Heures réelles par activité (ALLOC_NUMBER) dans le projet appelé 001
-    Explication : Agrège les heures réelles par identifiant d’allocation (proxy d’une activité). Si tu as une vraie table TASK (par ex. TASK(ALLOC_NUMBER → TASK_ID, TASK_NAME, …)), tu peux la joindre ici pour afficher le libellé d’activité.
+    Dans le projet 001, quelles sont les heures réelles par activité (ALLOC_NUMBER) et quelles activités consomment le plus ?
+    Peut-on classer les activités du projet 001 par volume d’heures réelles agrégées ?
   sql: |
     SELECT
       wp.ALLOC_NUMBER AS activity_id,
@@ -217,7 +214,9 @@
     GROUP BY wp.ALLOC_NUMBER
     ORDER BY actual_hours DESC;
 
-- question: "Heures planifiées par activité (global)"
+- question: |
+    Globalement, quelles activités portent le plus d’heures planifiées ?
+    Quelles sont les activités avec les taux planifiés moyens les plus élevés ?
   sql: |
     SELECT
       ta.ONB,
@@ -228,7 +227,9 @@
     GROUP BY ta.ONB 
     ORDER BY planned_hours DESC;
 
-- question: "Heures planifiées par activité pour le projet 002"
+- question: |
+    Pour le projet 002, quelles activités concentrent le plus d’heures planifiées ?
+    Quelles sont les activités du projet 002 avec les taux moyens planifiés les plus élevés ?
   sql: |
     SELECT
       ta.ONB,
@@ -241,8 +242,8 @@
     ORDER BY planned_hours DESC;
 
 - question: |
-    Heures réelles par ressource (avec états « billable/on-site »)
-    Explication : Vue utile pour la productivité et la facturabilité par ressource.
+    Quelles ressources portent le plus d’heures réelles et quelle part est billable ou on-site ?
+    Quelles ressources allouent la majorité de leurs heures à du facturable ou à de l’on-site ?
   sql: |
     SELECT
       r.ONB AS resource_onb,
@@ -255,8 +256,8 @@
     ORDER BY actual_hours DESC;
 
 - question: |
-    Heures (réelles & planifiées) par CBS
-    Explication : Vue consolidée par CBS (centre de coûts) pour croiser charge consommée et charge budgétée.
+    Par CBS, quelles sont les heures réelles et les heures planifiées agrégées ?
+    Quels CBS concentrent le plus de charge consommée et/ou budgétée ?
   sql: |
     WITH a AS (
       SELECT CBS, SUM(TOTAL_LOAD) AS ah
@@ -275,8 +276,8 @@
     ORDER BY cbs_onb;
 
 - question: |
-    Plan : distribution par DURATION_MODE et impact sur le taux fixe FIXED_RATE
-    Explication : Contrôle de paramétrage : comment les heures planifiées sont réparties selon les règles de durée et le verrouillage de taux.
+    Comment se répartissent les allocations planifiées par DURATION_MODE et FIXED_RATE ?
+    Quels réglages (mode de durée, taux fixe ou non) portent le plus d’allocations et d’heures planifiées ?
   sql: |
     SELECT
       ta.DURATION_MODE,
@@ -288,7 +289,9 @@
     GROUP BY ta.DURATION_MODE, ta.FIXED_RATE
     ORDER BY nb_alloc DESC;
 
-- question: "Coût planifié par projet (budget / prévision)"
+- question: |
+    Quel est le coût planifié par projet (budget/prévision) et combien de lignes le composent ?
+    Quels projets ont les budgets planifiés les plus élevés ?
   sql: |
     SELECT
       p.ONB  AS project_onb,
@@ -300,7 +303,10 @@
     GROUP BY p.ONB, p.NAME
     ORDER BY planned_cost DESC;
 
-- question: "Coût planifié du projet 007 (budget / prévision)"
+###
+- question: |
+    Quel est le coût planifié (budget/prévision) du projet 007 ?
+    Pour le projet 007, combien de lignes budgétaires sont comptabilisées et quel est le total ?
   sql: |
     SELECT
       p.ONB  AS project_onb,
@@ -314,8 +320,8 @@
     ORDER BY planned_cost DESC;
 
 - question: |
-    Coût réel par projet + EAC (coût) = AC + PLN
-    Explication : Calcule AC (réel), PLN (budget restant/planifié) et EAC (coût) = AC + PLN.
+    Par projet, quels sont le coût réel (AC), le coût planifié (PLN) et l’EAC (AC + PLN) ?
+    Quels projets ont l’EAC le plus élevé et comment se décomposent AC et PLN ?
   sql: |
     WITH ac AS (
       SELECT ie.DATASET, SUM(ie.qty) AS actual_cost
@@ -339,7 +345,9 @@
     WHERE a.DATASET IS NOT NULL OR pl.DATASET IS NOT NULL
     ORDER BY eac_cost DESC;
 
-- question: "Coûts par CBS"
+- question: |
+    Quels sont, par CBS, les coûts réels, planifiés et l’EAC (AC + PLN) ?
+    Quels CBS portent les coûts totaux (EAC) les plus importants ?
   sql: |
     WITH ac AS (
       SELECT CBS, SUM(qty) AS actual_cost
@@ -361,8 +369,8 @@
     ORDER BY eac_cost DESC;
 
 - question: |
-    Coûts planifiés par Type / Unité
-    Explication : Vue d’analyse financière par nature de dépense et unité monétaire.
+    Comment se répartissent les coûts planifiés par type et par unité (devise) ?
+    Quels couples Type × Unité concentrent le plus de budget planifié et combien de lignes comptent-ils ?
   sql: |
     SELECT
       e.TYPE,
@@ -373,7 +381,9 @@
     GROUP BY e.TYPE, e.UNIT
     ORDER BY planned_cost DESC;
 
-- question: "Heures & Coûts — vues combinées (Tableau de bord projet)"
+- question: |
+    Comment consolider, par projet, les heures réelles/planifiées et les coûts réels/planifiés (avec EAC heures et EAC coût) ?
+    Quels projets présentent quels niveaux d’heures et de coûts actuels et prévus, ainsi que leurs EAC correspondants ?
   sql: |
     WITH ah AS ( -- Actual Hours
       SELECT DATASET, SUM(TOTAL_LOAD) AS actual_hours
@@ -409,10 +419,10 @@
        OR ac.DATASET IS NOT NULL OR pc.DATASET IS NOT NULL
     ORDER BY p.ONB;
 
+###
 - question: |
-    Heures & Coûts — vues combinées (quand rapprochement pertinent)
-    Tableau de bord projet (heures + coûts)
-    Explication : Dashboard unique pour comparer heures et coûts d’un même projet, avec EAC heures et EAC coût.
+    Comment comparer, par projet, les heures réelles et planifiées ainsi que les coûts réels et budgétés (avec EAC heures et EAC coût) ?
+    Quels projets présentent quels niveaux d’heures/costs actuels et prévus, et quels EAC correspondants ?
   sql: |
     WITH ah AS ( -- Actual Hours
       SELECT DATASET, SUM(TOTAL_LOAD) AS actual_hours
@@ -449,8 +459,8 @@
     ORDER BY p.ONB;
 
 - question: |
-    Ratio € / h budgété (quand corrélé au même CBS)
-    Explication : Uniquement si tu as une corrélation métier (même CBS, même périmètre) entre heures et coûts planifiés : calcule un coût horaire indicatif (budget).
+    Quel est le coût horaire budgété (€ / h) par projet et CBS lorsque les heures et coûts planifiés sont corrélés ?
+    Pour chaque couple projet×CBS, quel ratio planned_cost / planned_hours obtient-on et quels sont les plus élevés ?
   sql: |
     WITH ph AS ( -- Planned hours par projet × CBS
       SELECT DATASET, CBS, SUM(TOTAL_LOAD) AS ph
@@ -473,8 +483,8 @@
     ORDER BY planned_cost_per_hour DESC NULLS LAST;
 
 - question: |
-    Effet d’un glissement de durée (+10 %) selon FIXED_RATE
-    Explication : Montre l’impact attendu d’une variation de durée.
+    Quel est l’impact attendu d’un glissement de durée de +10 % selon FIXED_RATE sur les heures et le taux moyen ?
+    Pour chaque ressource et projet, comment varient les heures et le rate si la durée augmente de 10 % ?
   sql: |
     SELECT
       ta.DATASET,
@@ -496,8 +506,8 @@
     ORDER BY ta.DATASET, ta.OPX2_RESOURCE;
 
 - question: |
-    Ressources génériques qui portent des heures réelles
-    Explication : Détecte les heures posées sur des profils génériques (utile pour la qualité d’affectation).
+    Quelles ressources génériques portent des heures réelles et en quel volume ?
+    Quelles sont les ressources marquées “génériques” avec le plus d’heures déclarées (tri décroissant) ?
   sql: |
     SELECT
       r.ONB AS resource_onb,
@@ -510,8 +520,8 @@
     ORDER BY actual_hours DESC;
 
 - question: |
-    Plans incohérents : FIXED_RATE=1 sans dates fixes
-    Explication : Contrôle simple de cohérence planning.
+    Quels plans sont incohérents car FIXED_RATE=1 mais sans dates fixes (FIXED_START/END manquantes) ?
+    Quelles lignes de TASK_ALLOC doivent être corrigées pour cohérence des contraintes ?
   sql: |
     SELECT *
     FROM TASK_ALLOC
@@ -519,8 +529,8 @@
       AND (FIXED_START IS NULL OR FIXED_END IS NULL);
 
 - question: |
-    Heures & Coûts par CBS (si INCURRED_EXPENDITURE.DATASET existe)
-    Explication : Donne pour chaque projet×CBS la charge heures (réelle/plan) et le coût (réel/plan). Idéal pour du contrôle budgétaire opérationnel.
+    Pour chaque projet×CBS, quelles sont les heures (réelles/planifiées) et les coûts (réels/planifiés) agrégés ?
+    Quels couples projet×CBS concentrent les volumes les plus élevés d’heures et/ou de coûts ?
   sql: |
     WITH ah AS (
       SELECT DATASET, CBS, SUM(TOTAL_LOAD) AS actual_hours
@@ -563,7 +573,8 @@
     ORDER BY p.ONB, k.CBS;
 
 - question: |
-    Audit rapide du projet 001 avec l’ordre WBS (approx. placement) puis la date de début cible
+    Pour le projet 001, puis-je obtenir un audit rapide ordonné par placement WBS puis par date de début cible ?
+    Quels enregistrements du projet 001 apparaissent et dans quel ordre WBS / chronologique (début/fin) ?
   sql: |
     SELECT ws.*
     FROM work_structure ws
@@ -571,9 +582,10 @@
     WHERE op."name" = '001'
     ORDER BY ws.placement NULLS LAST, ws.target_start NULLS LAST, ws.target_finish NULLS LAST;
 
+###
 - question: |
-    Fenêtre de réalisation par projet (span planning)
-    Utilité : bornes temporelles par projet à partir des cibles. Avec date de début, de fin et de fin prévue.
+    Quelles sont, par projet, les bornes temporelles de réalisation (premier début effectif et dernier fin effective) ainsi que la fin prévue ?
+    Pour chaque projet, quelle est l’étendue (span) du planning et combien d’éléments sont comptés ?
   sql: |
     SELECT op."name" AS project_code,
            MIN(ws.effective_start)  AS first_target_start,
@@ -586,8 +598,8 @@
     ORDER BY op."name";
 
 - question: |
-    Avancement “physique” moyen par projet
-    Utilité : photographie macro basée sur physical_furtherance (0–100).
+    Quel est l’avancement “physique” moyen (0–100) par projet ?
+    Quels projets affichent les plus forts niveaux d’avancement moyen et combien d’items sont pris en compte ?
   sql: |
     SELECT op."name" AS project_code,
            ROUND(AVG(ws.physical_furtherance)::numeric,1) AS avg_phys_progress,
@@ -599,8 +611,8 @@
     ORDER BY avg_phys_progress DESC NULLS LAST;
 
 - question: |
-    Répartition task_type par projet
-    Utilité : vérifier la typologie des éléments (jalon, sommaire, feuille…).
+    Quelle est la répartition des task_type par projet (volumes par type) ?
+    Pour chaque projet, combien d’éléments de chaque type (jalon, sommaire, feuille, etc.) sont présents ?
   sql: |
     SELECT op."name" AS project_code, ws.task_type, COUNT(*) AS nb
     FROM work_structure ws
@@ -608,7 +620,9 @@
     GROUP BY op."name", ws.task_type
     ORDER BY op."name", ws.task_type;
 
-- question: "Matrice Produit (BS1) × Client (BS0) — volume & ETC"
+- question: |
+    Quelle est la matrice Produit (BS1) × Client (BS0) : nombre d’activités et somme d’ETC ?
+    Quels couples produit–client concentrent le plus d’ETC et d’activités ?
   sql: |
     SELECT COALESCE(ws.opx2_1bs) AS product_line,
            COALESCE(ws.opx2_0bs) AS customer,
@@ -618,7 +632,9 @@
     GROUP BY product_line, customer
     ORDER BY etc_sum DESC NULLS LAST, nb_activities DESC;
 
-- question: "Fin dans les 90 prochains jours (tous projets)"
+- question: |
+    Quels éléments de tous les projets ont une date de fin cible dans les 90 prochains jours ?
+    Pour ces éléments, quelles sont les dates de fin prévues triées chronologiquement par projet et activité ?
   sql: |
     SELECT op."name" AS project_code, ws.onb, ws.name, ws."name" , ws.target_finish  
     FROM work_structure ws
@@ -627,7 +643,9 @@
       AND ws.target_finish <  now()  + make_interval(days => 90)
     ORDER BY ws.target_finish;
 
-- question: "Retards planifiés (échus, non terminés)"
+- question: |
+    Quels éléments sont en retard (date de fin planifiée échue) et non terminés ?
+    Pour chaque projet, quelles activités sont en retard aujourd’hui car encore sans date de fin effective ?
   sql: |
     SELECT op."name" AS project_code, ws.onb, ws.name, ws.target_finish, ws.effective_finish
     FROM work_structure ws
@@ -635,7 +653,9 @@
     WHERE ws.target_finish < now() 
       AND ws.effective_finish IS NULL;
 
-- question: "Écarts de temps entre la date de fin Réel et Planifiés, prévue (delta jours)"
+- question: |
+    Quels sont les écarts (en jours) entre la date de fin réelle et la date de fin planifiée ?
+    Quelles activités présentent les plus grands écarts positifs ou négatifs de délai ?
   sql: |
     SELECT op."name" AS project_code, ws.onb, ws.name,
            ws.target_finish, ws.effective_finish,
@@ -645,7 +665,9 @@
     WHERE ws.effective_finish IS NOT NULL
     ORDER BY delta_days DESC NULLS LAST;
 
-- question: "Conflits : contrainte de début après le début planifié"
+- question: |
+    Quels éléments ont une contrainte de début (imposed_start) postérieure au début planifié ?
+    Pour quels projets observe-t-on un imposed_start supérieur à target_start ?
   sql: |
     SELECT op."name" AS project_code, ws.onb, ws.name, ws.target_start , ws.imposed_start
     FROM work_structure ws
@@ -654,7 +676,9 @@
       AND ws.target_start IS NOT NULL
       AND ws.imposed_start > ws.target_start;
 
-- question: "Deadlines irréalistes : fin imposée avant fin planifiée"
+- question: |
+    Quels éléments ont une fin imposée (imposed_end) antérieure à la fin planifiée ?
+    Pour quels projets la contrainte de fin est-elle plus tôt que la cible (risque de deadline irréaliste) ?
   sql: |
     SELECT op."name" AS project_code, ws.onb, ws.name, ws.target_finish , ws.imposed_end
     FROM work_structure ws
@@ -664,17 +688,18 @@
       AND ws.imposed_end < ws.target_finish;
 
 - question: |
-    Éléments sans dates cibles
-    Utilité : hygiène de données avant reporting.
+    Quels éléments n’ont pas de dates cibles (target_start ou target_finish manquantes) ?
+    Pour ces éléments sans cibles, quels sont les types et priorités par projet ?
   sql: |
     SELECT op."name" AS project_code, ws.task_type, ws.priority
     FROM work_structure ws
     JOIN ordo_project op ON op.onb = ws.dataset
     WHERE ws.target_start IS NULL OR ws.target_finish IS NULL;
 
+###
 - question: |
-    Priorité moyenne par projet
-    Utilité : benchmark de sévérité/urgence relative.
+    Quelle est la priorité moyenne des tâches par projet ?
+    Quels projets ont la priorité moyenne la plus élevée et combien de tâches sont comptées ?
   sql: |
     SELECT op."name" AS project_code,
            ROUND(AVG(ws.priority)::numeric,1) AS avg_priority,
@@ -686,8 +711,8 @@
     ORDER BY avg_priority DESC NULLS LAST;
 
 - question: |
-    tc_closed : taux de clôture par projet
-    Utilité : suivre la complétion opérationnelle (timecard/fermeture).
+    Quel est le taux de clôture (tc_closed) par projet ?
+    Pour chaque projet, combien de tâches sont clôturées vs ouvertes/indéterminées ?
   sql: |
     SELECT op."name" AS project_code,
            COUNT(*) FILTER (WHERE ws.tc_closed IS TRUE)  AS closed,
@@ -699,8 +724,8 @@
     ORDER BY pct_closed DESC NULLS LAST;
 
 - question: |
-    sync_version manquant (à resynchroniser ?)
-    Utilité : détecter des lignes potentiellement hors-sync.
+    Quels projets contiennent des éléments sans valeur de sync_version ?
+    Combien de lignes manquent de sync_version par projet (tri décroissant) ?
   sql: |
     SELECT op."name" AS project_code, COUNT(*) AS nb_missing_sync
     FROM work_structure ws
@@ -710,8 +735,8 @@
     ORDER BY nb_missing_sync DESC;
 
 - question: |
-    Respect de la fenêtre budgétaire (sbudget_start/finish)
-    Utilité : items planifiés hors fenêtre budgétaire théorique.
+    Quels éléments sont planifiés hors de leur fenêtre budgétaire (sbudget_start/finish) ?
+    Pour chaque élément, quelles sont les dates cibles comparées aux bornes budgétaires ?
   sql: |
     SELECT op."name" AS project_code, ws.target_start, ws.target_finish, ws.sbudget_start, ws.sbudget_finish
     FROM work_structure ws
@@ -721,8 +746,8 @@
     ORDER BY op."name", ws.target_start NULLS LAST;
 
 - question: |
-    priority extrêmes dans le projet 001
-    Utilité : focus sur items très prioritaires ou très bas.
+    Dans le projet 001, quelle est la distribution des priorités ?
+    Quelles priorités (les plus hautes ou basses) sont les plus fréquentes dans le projet 001 ?
   sql: |
     SELECT ws.priority, COUNT(*) AS nb
     FROM work_structure ws
@@ -732,11 +757,8 @@
     ORDER BY ws.priority DESC NULLS LAST;
 
 - question: |
-    Coûts d’un projet précis (AC, PLN, EAC, Variance, CPI) — projet '001'
-    Utilité : Photo financière synthèse d’un projet, conforme à tes définitions :
-      • EAC (coût) = AC + PLN
-      • Écart de coût = AC − PLN
-      • CPI = AC / PLN
+    Pour le projet 001, quels sont AC, PLN, EAC, la variance de coût et le CPI ?
+    Quelle est l’estimation à achèvement (EAC) et le CPI du projet 001 à partir d’AC et PLN ?
   sql: |
     WITH ac AS (  -- Actual cost sur tout l’historique
       SELECT SUM(ie.qty) AS actual_cost
@@ -761,9 +783,10 @@
     FROM ac
     CROSS JOIN pl;
 
+###
 - question: |
-    Par ressource : heures réelles pour le projet 001
-    Utilité : qui consomme le plus (staffing réel).
+    Pour le projet 001, combien d’heures réelles chaque ressource a-t-elle déclarées ?
+    Quelles ressources ont le plus consommé d’heures sur le projet 001 ?
   sql: |
     SELECT p.NAME AS project_name,
            wp.OPX2_RESOURCE AS resource_id,
@@ -775,8 +798,8 @@
     ORDER BY actual_hours DESC;
 
 - question: |
-    Heures réelles Billable vs Non billable
-    Utilité : suivi d’“utilization” facturable.
+    Sur le projet 001, quelle est la répartition des heures réelles entre facturable et non facturable ?
+    Combien d’heures facturables vs non facturables ont été saisies pour le projet 001 ?
   sql: |
     SELECT CASE WHEN wp.OPX2__TC_AA_B_BILLABLE = True THEN 'BILLABLE' ELSE 'NON_BILLABLE' END AS bill_flag,
            SUM(wp.TOTAL_LOAD) AS hours
@@ -786,14 +809,14 @@
     GROUP BY CASE WHEN wp.OPX2__TC_AA_B_BILLABLE = True THEN 'BILLABLE' ELSE 'NON_BILLABLE' END;
 
 - question: |
-    Profil mensuel des heures planifiées — 6 derniers mois
-    Utilité : série temporelle du plan (les ACT ne sont pas datés).
+    Sur les six derniers mois, quel est le total mensuel des heures planifiées du projet 001 ?
+    Combien d’heures planifiées par mois (de M-5 à M) pour le projet 001 ?
   sql: |
     WITH months AS (
       SELECT
-        (date_trunc('month', now()) - MAKE_INTERVAL(months => g))::date                                         AS m_start,
+        (date_trunc('month', now()) - MAKE_INTERVAL(months => g))::date AS m_start,
         ((date_trunc('month', now()) - MAKE_INTERVAL(months => g)) + MAKE_INTERVAL(months => 1)
-           - MAKE_INTERVAL(days => 1))::date                                                                    AS m_end
+           - MAKE_INTERVAL(days => 1))::date AS m_end
       FROM generate_series(0, 5) AS g
     )
     SELECT
@@ -806,20 +829,13 @@
               ta.TOTAL_LOAD
               * GREATEST(
                   0,
-                  (
-                    LEAST(ta.FIXED_END::date,   m.m_end::date)
-                    - GREATEST(ta.FIXED_START::date, m.m_start::date)
-                    + 1
-                  )::int
+                  (LEAST(ta.FIXED_END::date, m.m_end::date) - GREATEST(ta.FIXED_START::date, m.m_start::date) + 1)::int
                 )::numeric
-                / NULLIF(
-                    (ta.FIXED_END::date - ta.FIXED_START::date + 1)::int,
-                    0
-                  )
+                / NULLIF((ta.FIXED_END::date - ta.FIXED_START::date + 1)::int, 0)
             ELSE 0
           END
-        )
-      ,0) AS planned_hours
+        ), 0
+      ) AS planned_hours
     FROM months m
     JOIN ORDO_PROJECT p ON p.NAME = '001'
     JOIN TASK_ALLOC ta  ON ta.DATASET = p.ONB
@@ -827,8 +843,8 @@
     ORDER BY month_start;
 
 - question: |
-    Hygiène planning (work_structure) : tâches à clôturer
-    Utilité : tâches dont la fin planifiée est passée mais tc_closed = 0.
+    Quelles tâches du projet 001 ont une date de fin planifiée dépassée mais ne sont pas clôturées ?
+    Combien de tâches en retard non clôturées par type et par priorité dans le projet 001 ?
   sql: |
     SELECT
       ws.task_type,
@@ -843,8 +859,8 @@
     ORDER BY tasks_late_not_closed DESC;
 
 - question: |
-    Portefeuille : top projets par heures réelles
-    Utilité : pilotage global (sans dates côté ACT).
+    Quels sont les 10 projets qui totalisent le plus d’heures réelles ?
+    Dans le portefeuille, quels projets ont le plus consommé d’heures (top 10) ?
   sql: |
     SELECT p.NAME AS project_name,
            SUM(wp.TOTAL_LOAD) AS actual_hours
@@ -855,8 +871,8 @@
     LIMIT 10;
 
 - question: |
-    Exposition délai agrégée pour le projet nommé 001
-    Utilité : lecture du risque planning si ta table risques est utilisée.
+    Pour le projet 001, quelle est l’exposition totale aux délais liée aux risques ?
+    Quel est l’impact cumulé sur les délais des risques du projet 001 ?
   sql: |
     SELECT p.NAME AS project_name,
            SUM(r.MC_AA_D_DELAY_IMPACT) AS total_delay_impact
@@ -864,4 +880,3 @@
     JOIN OPX2__WF_PT_RISKS r ON r.DATASET = p.ONB
     WHERE p.NAME = '001'
     GROUP BY p.NAME;
-
